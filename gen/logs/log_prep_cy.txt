@@ -1,0 +1,21 @@
+[transformers] `CLIPImageProcessor` requires torchvision (not installed); falling back to `CLIPImageProcessorPil` for backward compatibility. Install torchvision to use the default backend, or import `CLIPImageProcessorPil` directly to silence this warning.
+[transformers] `SiglipImageProcessor` requires torchvision (not installed); falling back to `SiglipImageProcessorPil` for backward compatibility. Install torchvision to use the default backend, or import `SiglipImageProcessorPil` directly to silence this warning.
+Loading pipeline components...:   0%|          | 0/5 [00:00<?, ?it/s]
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][ALoading weights: 100%|██████████| 196/196 [00:00<00:00, 12618.90it/s]
+Loading pipeline components...:  20%|██        | 1/5 [00:00<00:00,  6.85it/s]Loading pipeline components...: 100%|██████████| 5/5 [00:00<00:00, 18.35it/s]Loading pipeline components...: 100%|██████████| 5/5 [00:00<00:00, 16.66it/s]
+There are modules in UNet2DConditionModel that should be kept in float32: []. Casting directly with `to()` can lead to inconsistent results; set `torch_dtype` in `from_pretrained()` instead to keep these modules in float32.
+hires 55
+[ WARN:0@56.853] global net_impl_backend.cpp:345 setPreferableTarget Targets are not supported by the new graph engine for now
+face 77
+mouth_closed_1 119
+mouth_sm_1 150
+mouth_sm_2 181
+mouth_open_1 212
+mouth_open_2 243
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (79 > 77). Running this sequence through the model will result in indexing errors
+mouth_oh_1 275
+mouth_oh_2 306
+mouth_ee_1 338
+blink_1 368
+blink_2 399
+done

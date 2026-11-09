@@ -1,0 +1,7 @@
+{
+ "paige": {"mouth": {"1": "mouth_sm_2", "2": "mouth_oh_1", "3": "mouth_ee_1", "4": "mouth_oh_2", "5": "mouth_closed_1"}, "blink": "blink_1"},
+ "cy": {"mouth": {"1": "mouth_ah_2", "2": "mouth_wide_2", "3": "mouth_open_2", "4": "mouth_oh_2", "5": "mouth_closed_1"}, "blink": "blink_2"},
+ "dee": {"mouth": {"1": "mouth_ah_2", "2": "mouth_ah_1", "3": "mouth_open_1", "4": "mouth_oh_2", "5": "mouth_closed_1"}, "blink": "blink_2"},
+ "sunny": {"mouth": {"1": "mouth_oh_3", "2": "mouth_ah_1", "3": "mouth_open_1", "4": "mouth_oh_2", "5": "mouth_closed_1"}, "blink": "blink_1", "wxScale": 1.08},
+ "mel": {"mouth": {"1": "mouth_open_1", "2": "mouth_ah_2", "3": "mouth_ee_1", "4": "mouth_oh_2", "5": "mouth_sm_2"}, "blink": "blink_1"}
+}

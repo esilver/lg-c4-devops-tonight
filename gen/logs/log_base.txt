@@ -1,0 +1,26 @@
+[transformers] `CLIPImageProcessor` requires torchvision (not installed); falling back to `CLIPImageProcessorPil` for backward compatibility. Install torchvision to use the default backend, or import `CLIPImageProcessorPil` directly to silence this warning.
+[transformers] `SiglipImageProcessor` requires torchvision (not installed); falling back to `SiglipImageProcessorPil` for backward compatibility. Install torchvision to use the default backend, or import `SiglipImageProcessorPil` directly to silence this warning.
+Loading pipeline components...:   0%|          | 0/5 [00:00<?, ?it/s]Loading pipeline components...:  40%|████      | 2/5 [00:00<00:00, 12.67it/s]
+Loading weights:   0%|          | 0/196 [00:00<?, ?it/s][ALoading weights: 100%|██████████| 196/196 [00:00<00:00, 3215.02it/s]
+Loading pipeline components...:  80%|████████  | 4/5 [00:00<00:00, 12.78it/s]Loading pipeline components...: 100%|██████████| 5/5 [00:00<00:00, 15.94it/s]
+There are modules in UNet2DConditionModel that should be kept in float32: []. Casting directly with `to()` can lead to inconsistent results; set `torch_dtype` in `from_pretrained()` instead to keep these modules in float32.
+paige 21 53.9
+cy 21 55.5
+dee 21 52.5
+sunny 21 52.0
+mel 21 52.6
+paige 22 53.5
+cy 22 51.9
+dee 22 51.4
+sunny 22 51.6
+mel 22 52.1
+paige 23 75.2
+cy 23 57.3
+dee 23 50.2
+sunny 23 49.7
+mel 23 50.2
+paige 24 50.9
+cy 24 51.1
+dee 24 49.7
+sunny 24 53.0
+mel 24 51.8
