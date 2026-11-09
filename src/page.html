@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LG C4 in WebGL: DevOps Tonight</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #090a0d; overflow: hidden; }
+  body { font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8eaee; }
+  #gl { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  #gl:active { cursor: grabbing; }
+  #remote {
+    position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+    display: flex; gap: 8px; align-items: center; padding: 8px;
+    background: rgba(20, 22, 28, .82); border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  #remote button {
+    font: inherit; color: inherit; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 9px; padding: 9px 14px; min-width: 48px; cursor: pointer; white-space: nowrap;
+  }
+  #remote button:hover { background: rgba(255,255,255,.16); }
+  #remote button:focus-visible { outline: 2px solid #2ee6a6; outline-offset: 2px; }
+  #power { color: #ff6b5e !important; }
+  #chname { min-width: 8.5em; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (max-width: 440px) { #remote { gap: 5px; padding: 6px; } #remote button { padding: 9px 10px; min-width: 42px; } #chname { min-width: 7.5em; font-size: 13px; } }
+  #hint small { font-size: 11.5px; opacity: .8; }
+  #hint { position: fixed; top: 12px; left: 0; right: 0; text-align: center; color: rgba(232,234,238,.55); font-size: 12.5px; pointer-events: none; padding: 0 12px; }
+  #err { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hint">Drag to orbit · scroll or pinch to zoom · ← → change channel · P power<br><small>Channel 1 is satire. Its presenters and locations are AI-generated stills, not real people or places.</small></div>
+<div id="remote" role="group" aria-label="TV remote">
+  <button id="power" aria-label="Power">⏻</button>
+  <button id="prev" aria-label="Previous channel">CH −</button>
+  <span id="chname"></span>
+  <button id="next" aria-label="Next channel">CH +</button>
+</div>
+<div id="err">WebGL isn't available in this browser, so the TV can't be drawn.</div>
+<script>
+'use strict';
+// Plain JavaScript throughout: raw WebGL for the TV, Canvas 2D for the picture, no libraries.
+// The news channel's photographs are AI-generated stills embedded below as data: URIs, together with a
+// few re-posed renders of each face (jaw, lips, eyelids, brows). All motion is composited from them in
+// this script: speech curves, blinks, head movement, camera and graphics.
+
+/* ───────────────────────── The channel (Canvas 2D → texture) ───────────────────────── */
+const SW = 1024, SH = 576;
+const scr = document.createElement('canvas'); scr.width = SW; scr.height = SH;
+const c = scr.getContext('2d');
+const low = document.createElement('canvas'); low.width = 160; low.height = 90;       // per-pixel effects
+const lc = low.getContext('2d');
+const lowImg = lc.createImageData(160, 90);
+const tiny = document.createElement('canvas'); tiny.width = tiny.height = 4;          // average colour probe
+const tc = tiny.getContext('2d', { willReadFrequently: true });
+const MONO = '"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace';
+const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const JSY = '#f7df1e';
+
+function jsLogo(x, y, s, bg, fg) {
+  c.fillStyle = bg || JSY; c.fillRect(x, y, s, s);
+  c.fillStyle = fg || '#111'; c.font = `bold ${s * 0.52}px ${SANS}`;
+  c.textAlign = 'right'; c.textBaseline = 'alphabetic';
+  c.fillText('JS', x + s * 0.93, y + s * 0.9);
+}
+
+/*NEWS*/
+function chPlasma(t) {
+  const d = lowImg.data; let i = 0;
+  for (let y = 0; y < 90; y++) for (let x = 0; x < 160; x++) {
+    const u = x / 26, v = y / 26;
+    const p = Math.sin(u + t) + Math.sin(v * 1.3 - t * 0.7) + Math.sin((u + v) * 0.7 + t * 0.5)
+            + Math.sin(Math.hypot(u - 3 + Math.sin(t * 0.4) * 2, v - 1.7 + Math.cos(t * 0.3)) * 1.6 - t);
+    d[i++] = 128 + 127 * Math.sin(p * 1.6);
+    d[i++] = 128 + 127 * Math.sin(p * 1.6 + 2.1 + t * 0.2);
+    d[i++] = 128 + 127 * Math.sin(p * 1.6 + 4.2);
+    d[i++] = 255;
+  }
+  lc.putImageData(lowImg, 0, 0);
+  c.imageSmoothingEnabled = true; c.drawImage(low, 0, 0, SW, SH);
+}
+
+const dvd = { x: 300, y: 200, vx: 170, vy: 128, hue: 50, hits: 0, corners: 0, last: 0 };
+function chBounce(t) {
+  const dt = Math.min(0.05, t - dvd.last); dvd.last = t;
+  const S = 150;
+  dvd.x += dvd.vx * dt; dvd.y += dvd.vy * dt;
+  let hx = false, hy = false;
+  if (dvd.x < 0) { dvd.x = 0; dvd.vx *= -1; hx = true; } else if (dvd.x > SW - S) { dvd.x = SW - S; dvd.vx *= -1; hx = true; }
+  if (dvd.y < 0) { dvd.y = 0; dvd.vy *= -1; hy = true; } else if (dvd.y > SH - S) { dvd.y = SH - S; dvd.vy *= -1; hy = true; }
+  if (hx || hy) { dvd.hue = (dvd.hue + 67) % 360; dvd.hits++; if (hx && hy) dvd.corners++; }
+  c.fillStyle = '#000'; c.fillRect(0, 0, SW, SH);          // true OLED black
+  opsLogo(dvd.x, dvd.y, S, `hsl(${dvd.hue} 95% 58%)`);
+  c.fillStyle = 'rgba(255,255,255,.5)'; c.font = `18px ${MONO}`; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  c.fillText(`restarts: ${dvd.hits}   corner hits: ${dvd.corners}`, 28, SH - 26);
+}
+
+const stars = Array.from({ length: 260 }, () => ({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() }));
+function chStars(t) {
+  c.fillStyle = '#02030a'; c.fillRect(0, 0, SW, SH);
+  c.fillStyle = '#fff';
+  for (const s of stars) {
+    s.z -= 0.006; if (s.z < 0.02) { s.z = 1; s.x = Math.random() * 2 - 1; s.y = Math.random() * 2 - 1; }
+    const px = SW / 2 + s.x / s.z * 300, py = SH / 2 + s.y / s.z * 300, r = (1 - s.z) * 3;
+    if (px > 0 && px < SW && py > 0 && py < SH) { c.globalAlpha = 1 - s.z; c.fillRect(px, py, r, r); }
+  }
+  c.globalAlpha = 1;
+  // scrolling source code, perspective-free "crawl"
+  const lines = ['$ git push origin main', '# pipeline 4127 started', 'lint ........ passed', 'unit tests .. passed', 'build image . passed', 'scan image .. 0 critical', '$ kubectl rollout status deploy/tv', 'deployment "tv" successfully rolled out', '', '# canary at 5%, error rate 0.00%', '# promoting to 100%', '', '# all checks green', '# nobody trusts it'];
+  c.font = `26px ${MONO}`; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  const total = lines.length * 40 + SH, off = (t * 45) % total;
+  lines.forEach((ln, i) => {
+    const y = SH + i * 40 - off + 20;
+    if (y < -20 || y > SH + 30) return;
+    c.fillStyle = ln.startsWith('#') ? '#7f8ea3' : '#2ee6a6';
+    c.globalAlpha = Math.max(0, Math.min(1, y / 140)) * Math.max(0, Math.min(1, (SH - y) / 80 + 0.3));
+    c.fillText(ln, 190, y);
+  });
+  c.globalAlpha = 1;
+}
+
+function chBars(t) {
+  const cols = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
+  const w = SW / 7;
+  cols.forEach((k, i) => { c.fillStyle = k; c.fillRect(i * w, 0, w + 1, 400); });
+  ['#0000c0', '#111', '#c000c0', '#111', '#00c0c0', '#111', '#c0c0c0'].forEach((k, i) => { c.fillStyle = k; c.fillRect(i * w, 400, w + 1, 40); });
+  c.fillStyle = '#111'; c.fillRect(0, 440, SW, 136);
+  const gr = c.createLinearGradient(0, 0, SW, 0); gr.addColorStop(0, '#000'); gr.addColorStop(1, '#fff');
+  c.fillStyle = gr; c.fillRect(0, 440, SW, 50);
+  c.fillStyle = '#000'; c.fillRect(SW / 2 - 250, 150, 500, 110);
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  c.font = `bold 40px ${MONO}`; c.fillText('tv   1/1   Running', SW / 2, 205);
+  c.font = `20px ${MONO}`; c.fillText('TEST CARD · ' + new Date().toTimeString().slice(0, 8), SW / 2, 242);
+  c.font = `20px ${MONO}`; c.fillText('$ kubectl get pods -n living-room', SW / 2, 540);
+}
+
+function staticNoise() {
+  const d = lowImg.data;
+  for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  lc.putImageData(lowImg, 0, 0);
+  c.imageSmoothingEnabled = false; c.drawImage(low, 0, 0, SW, SH); c.imageSmoothingEnabled = true;
+}
+
+const CHANNELS = [
+  { name: 'DevOps Tonight', draw: chNews },
+  { name: 'Plasma', draw: chPlasma },
+  { name: 'Screensaver', draw: chBounce },
+  { name: 'Deploy Log', draw: chStars },
+  { name: 'Test Card', draw: chBars },
+];
+let channel = 0, powered = true, switchedAt = -10, powerAt = -10, nowT = 0;
+
+function drawScreen(t) {
+  if (!powered) { c.fillStyle = '#000'; c.fillRect(0, 0, SW, SH); return; }
+  const since = t - switchedAt;
+  if (since < 0.32) staticNoise();
+  else try { CHANNELS[channel].draw(t); } catch (e) {            // never let one bad frame stop the set
+    scr.width = SW; c.fillStyle = '#050b1a'; c.fillRect(0, 0, SW, SH); c.fillStyle = '#fff'; c.font = `22px ${SANS}`; c.textAlign = 'center';
+    c.fillText('Picture unavailable on this channel', SW / 2, SH / 2);
+  }
+  // channel bug
+  if (channel !== 0) { c.globalAlpha = 0.75; opsLogo(SW - 76, SH - 76, 44); c.globalAlpha = 1; }
+  // on-screen display after a channel change
+  if (since < 2.6) {
+    c.globalAlpha = Math.min(1, (2.6 - since) / 0.4);
+    c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(SW - 330, 74, 290, 78);
+    c.fillStyle = '#7CFC7C'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    c.font = `bold 34px ${MONO}`; c.fillText('CH ' + String(channel + 1).padStart(2, '0'), SW - 312, 114);
+    c.font = `17px ${MONO}`; c.fillText(CHANNELS[channel].name, SW - 312, 140);
+    c.globalAlpha = 1;
+  }
+  // power-on fade
+  const p = t - powerAt;
+  if (p < 0.8) { c.fillStyle = `rgba(0,0,0,${1 - p / 0.8})`; c.fillRect(0, 0, SW, SH); }
+}
+
+/* ───────────────────────── WebGL ───────────────────────── */
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: true }) || canvas.getContext('webgl', { antialias: true });
+const GL2 = !!gl && typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+if (!gl) { document.getElementById('err').style.display = 'grid'; throw new Error('no webgl'); }
+
+function program(vs, fs) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  for (let i = 0, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i < n; i++) {
+    const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name);
+  }
+  return { p, u };
+}
+
+// TV geometry in metres, modelled on the 65" C4: 1441 × 826 mm panel, a few mm thick up top,
+// electronics housing on the lower back, centred pedestal stand.
+const TOP = 0.5;                       // top of the media console
+const PW = 1.441, PH = 0.826, PY = TOP + 0.062 + PH / 2;   // panel centre height
+const BEZ = 0.007;
+const SX0 = -PW / 2 + BEZ, SX1 = PW / 2 - BEZ, SY0 = PY - PH / 2 + BEZ + 0.004, SY1 = PY + PH / 2 - BEZ;
+const BG = [0.035, 0.04, 0.052];
+
+const boxProg = program(`
+attribute vec3 aPos, aNor;
+uniform mat4 uVP; uniform vec3 uC, uS;
+varying vec3 vW, vN;
+void main(){ vW = aPos*uS + uC; vN = aNor; gl_Position = uVP*vec4(vW,1.); }`, `
+precision mediump float;
+uniform vec3 uColor, uEye, uGlow, uEmis, uBg;
+uniform vec4 uRect;                    // screen rectangle: x0, y0, x1, y1 at z = 0
+uniform float uShine, uSpec;
+varying vec3 vW, vN;
+void main(){
+  vec3 n = normalize(vN), v = normalize(uEye - vW);
+  vec3 L = normalize(vec3(.45,.9,.65)), L2 = normalize(vec3(-.6,.4,-.7));
+  float diff = max(dot(n,L),0.)*.62 + max(dot(n,L2),0.)*.5;
+  float spec = pow(max(dot(n,normalize(L+v)),0.), uShine)*uSpec;
+  // light spilled by the picture: nearest point on the screen acts as the emitter
+  vec3 toS = vec3(clamp(vW.xy, uRect.xy, uRect.zw), 0.) - vW;
+  float d = length(toS); vec3 dir = toS/max(d,1e-4);
+  float g = max(dot(n,dir),0.) * max(-dir.z,0.) / (1. + 5.*d*d);
+  vec3 col = uColor*(.34 + diff) + spec + uColor*uGlow*g*5. + uEmis;
+  col = mix(col, uBg, smoothstep(2.2, 7.5, length(vW.xz)));
+  gl_FragColor = vec4(col,1.);
+}`);
+
+const scrProg = program(`
+attribute vec3 aPos; attribute vec2 aUV;
+uniform mat4 uVP; varying vec2 vUV; varying vec3 vW;
+void main(){ vUV = aUV; vW = aPos; gl_Position = uVP*vec4(aPos,1.); }`, `
+precision mediump float;
+uniform sampler2D uTex; uniform vec3 uEye;
+varying vec2 vUV; varying vec3 vW;
+void main(){
+  vec3 v = normalize(uEye - vW);
+  float f = pow(1. - max(v.z,0.), 4.);            // glass sheen at grazing angles
+  vec3 col = texture2D(uTex, vUV).rgb*(1. - f*.5) + vec3(.10,.12,.16)*f;
+  gl_FragColor = vec4(col,1.);
+}`);
+
+// unit cube, centred, with face normals
+const cube = (() => {
+  const P = [], N = [], I = [];
+  const faces = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  faces.forEach((n, f) => {
+    const u = [n[1], n[2], n[0]], w = [n[1]*u[2]-n[2]*u[1], n[2]*u[0]-n[0]*u[2], n[0]*u[1]-n[1]*u[0]];
+    for (const [a, b] of [[-1,-1],[1,-1],[1,1],[-1,1]]) {
+      P.push((n[0]+a*u[0]+b*w[0])/2, (n[1]+a*u[1]+b*w[1])/2, (n[2]+a*u[2]+b*w[2])/2); N.push(...n);
+    }
+    I.push(f*4, f*4+1, f*4+2, f*4, f*4+2, f*4+3);
+  });
+  const buf = (target, data) => { const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW); return b; };
+  return { pos: buf(gl.ARRAY_BUFFER, new Float32Array(P)), nor: buf(gl.ARRAY_BUFFER, new Float32Array(N)), idx: buf(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(I)) };
+})();
+
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  SX0, SY0, 0.0006, 0, 0,   SX1, SY0, 0.0006, 1, 0,   SX1, SY1, 0.0006, 1, 1,
+  SX0, SY0, 0.0006, 0, 0,   SX1, SY1, 0.0006, 1, 1,   SX0, SY1, 0.0006, 0, 1]), gl.STATIC_DRAW);
+
+const tex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, GL2 ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);   // mipmaps keep the picture clean when the set is small or seen at an angle
+const aniso = GL2 && gl.getExtension('EXT_texture_filter_anisotropic');
+if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+// [centre], [size], [colour], shininess, specular, glow response
+const BLACK = [0.012, 0.012, 0.014], HOUSING = [0.085, 0.085, 0.095], ALU = [0.34, 0.35, 0.37];
+const led = { c: [0, PY - PH / 2 - 0.004, 0.004], s: [0.022, 0.004, 0.006], col: BLACK, sh: 8, sp: 0, emis: [0, 0, 0] };
+const parts = [
+  { c: [0, -0.01, 0], s: [18, 0.02, 18], col: [0.16, 0.15, 0.145], sh: 30, sp: 0.05 },                       // floor
+  { c: [0, TOP / 2 + 0.03, -0.02], s: [2.0, TOP - 0.06, 0.44], col: [0.30, 0.2, 0.125], sh: 40, sp: 0.12 },  // console body
+  { c: [0, TOP - 0.01, -0.02], s: [2.06, 0.02, 0.48], col: [0.36, 0.245, 0.155], sh: 60, sp: 0.2 },          // console top
+  { c: [-0.9, 0.03, -0.02], s: [0.06, 0.06, 0.4], col: BLACK, sh: 20, sp: 0.1 },                             // console feet
+  { c: [0.9, 0.03, -0.02], s: [0.06, 0.06, 0.4], col: BLACK, sh: 20, sp: 0.1 },
+  { c: [0, 0.27, 0.201], s: [0.004, 0.42, 0.002], col: [0.12, 0.08, 0.05], sh: 8, sp: 0 },                   // door gap
+  { c: [0, PY, -0.003], s: [PW, PH, 0.006], col: BLACK, sh: 90, sp: 0.5 },                                   // OLED panel
+  { c: [0, PY - PH / 2 + 0.232, -0.026], s: [1.19, 0.46, 0.04], col: HOUSING, sh: 25, sp: 0.15 },            // rear housing
+  { c: [0, PY - PH / 2 + 0.47, -0.016], s: [1.19, 0.02, 0.02], col: HOUSING, sh: 25, sp: 0.15 },             // housing taper
+  { c: [0, PY - PH / 2 + 0.25, -0.0465], s: [0.3, 0.2, 0.001], col: [0.03, 0.03, 0.033], sh: 20, sp: 0.1 },  // VESA plate
+  { c: [0, TOP + 0.105, -0.061], s: [0.36, 0.19, 0.03], col: ALU, sh: 70, sp: 0.5 },                         // stand neck
+  { c: [0, TOP + 0.006, -0.02], s: [0.475, 0.012, 0.23], col: ALU, sh: 90, sp: 0.6 },                        // stand plate
+  { c: [0, PY, -0.0062], s: [PW - 0.004, PH - 0.004, 0.001], col: [0.06, 0.06, 0.068], sh: 30, sp: 0.2 },                // rear skin
+  led,
+];
+
+/* ───────────────────────── Camera ───────────────────────── */
+const cam = { yaw: -0.5, pitch: 0.16, dist: 2.55, target: [0, 0.9, 0], auto: true };
+function perspective(fovy, asp, n, f) {
+  const t = 1 / Math.tan(fovy / 2);
+  return [t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0];
+}
+function lookAt(e, t) {
+  let z = [e[0] - t[0], e[1] - t[1], e[2] - t[2]]; const zl = Math.hypot(...z); z = z.map(v => v / zl);
+  let x = [z[2], 0, -z[0]]; const xl = Math.hypot(...x); x = x.map(v => v / xl);          // up × z, up = +Y
+  const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+  const d = (a) => -(a[0] * e[0] + a[1] * e[1] + a[2] * e[2]);
+  return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, d(x), d(y), d(z), 1];
+}
+function mul(a, b) {
+  const o = new Float32Array(16);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++)
+    o[i * 4 + j] = b[i * 4] * a[j] + b[i * 4 + 1] * a[4 + j] + b[i * 4 + 2] * a[8 + j] + b[i * 4 + 3] * a[12 + j];
+  return o;
+}
+
+const pointers = new Map(); let pinch = 0;
+canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]); cam.auto = false; pinch = 0; });
+canvas.addEventListener('pointermove', e => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  if (pointers.size === 1) {
+    cam.yaw -= (e.clientX - p[0]) * 0.006;
+    cam.pitch = Math.max(-0.12, Math.min(1.35, cam.pitch + (e.clientY - p[1]) * 0.005));
+  }
+  p[0] = e.clientX; p[1] = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    if (pinch) zoom(pinch / d); pinch = d;
+  }
+});
+const up = e => { pointers.delete(e.pointerId); pinch = 0; };
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('wheel', e => { e.preventDefault(); cam.auto = false; zoom(Math.exp(e.deltaY * 0.001)); }, { passive: false });
+function zoom(k) { cam.dist = Math.max(1.1, Math.min(6.5, cam.dist * k)); }
+
+/* ───────────────────────── Remote ───────────────────────── */
+const chname = document.getElementById('chname');
+function label() { chname.textContent = powered ? `${channel + 1} · ${CHANNELS[channel].name}` : 'Standby'; }
+function tune(d) {
+  if (!powered) return togglePower();
+  channel = (channel + d + CHANNELS.length) % CHANNELS.length; switchedAt = nowT; label();
+}
+function togglePower() { powered = !powered; if (powered) { powerAt = nowT; switchedAt = nowT + 0.3; } label(); }
+document.getElementById('prev').onclick = () => tune(-1);
+document.getElementById('next').onclick = () => tune(1);
+document.getElementById('power').onclick = togglePower;
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') tune(1);
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') tune(-1);
+  else if (e.key === 'p' || e.key === 'P') togglePower();
+  else if (/^[1-9]$/.test(e.key) && +e.key <= CHANNELS.length && powered) { channel = +e.key - 1; switchedAt = nowT; label(); }
+});
+label();
+
+/* ───────────────────────── Frame loop ───────────────────────── */
+const glow = [0, 0, 0]; let frameNo = 0;
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2), w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+function frame(ms) {
+  nowT = ms / 1000; resize();
+  drawScreen(nowT);
+  if (frameNo++ % 4 === 0) {                 // average picture colour drives the light spill
+    tc.drawImage(scr, 0, 0, 4, 4); const d = tc.getImageData(0, 0, 4, 4).data; let r = 0, g = 0, b = 0;
+    for (let i = 0; i < 64; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    const tgt = [r / 4080, g / 4080, b / 4080];
+    for (let i = 0; i < 3; i++) glow[i] += (tgt[i] - glow[i]) * 0.35;
+  }
+  led.emis = powered ? [0, 0, 0] : [0.9, 0.05, 0.03];
+
+  if (cam.auto) cam.yaw = -0.5 + Math.sin(nowT * 0.25) * 0.45 + 0.45;
+  const cp = Math.cos(cam.pitch), asp = canvas.width / canvas.height;
+  const dist = cam.dist * Math.max(1, 0.92 / asp);          // keep the set in frame on portrait screens
+  const eye = [cam.target[0] + dist * cp * Math.sin(cam.yaw), cam.target[1] + dist * Math.sin(cam.pitch), cam.target[2] + dist * cp * Math.cos(cam.yaw)];
+  const vp = mul(perspective(0.7, asp, 0.05, 60), lookAt(eye, cam.target));
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(BG[0], BG[1], BG[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+
+  // boxes
+  let u = boxProg.u;
+  gl.useProgram(boxProg.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cube.pos); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cube.nor); gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cube.idx);
+  gl.uniformMatrix4fv(u.uVP, false, vp);
+  gl.uniform3fv(u.uEye, eye); gl.uniform3fv(u.uGlow, glow); gl.uniform3fv(u.uBg, BG);
+  gl.uniform4f(u.uRect, SX0, SY0, SX1, SY1);
+  for (const p of parts) {
+    gl.uniform3fv(u.uC, p.c); gl.uniform3fv(u.uS, p.s); gl.uniform3fv(u.uColor, p.col);
+    gl.uniform1f(u.uShine, p.sh); gl.uniform1f(u.uSpec, p.sp); gl.uniform3fv(u.uEmis, p.emis || [0, 0, 0]);
+    gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+  }
+
+  // the picture
+  u = scrProg.u;
+  gl.useProgram(scrProg.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scr);
+  if (GL2) gl.generateMipmap(gl.TEXTURE_2D);
+  gl.uniformMatrix4fv(u.uVP, false, vp); gl.uniform3fv(u.uEye, eye); gl.uniform1i(u.uTex, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+  requestAnimationFrame(frame);
+}
+for (const pr of [boxProg, scrProg]) { gl.bindAttribLocation(pr.p, 0, 'aPos'); }
+gl.bindAttribLocation(boxProg.p, 1, 'aNor'); gl.bindAttribLocation(scrProg.p, 1, 'aUV');
+gl.linkProgram(boxProg.p); gl.linkProgram(scrProg.p);
+for (const pr of [boxProg, scrProg])
+  for (const k in pr.u) pr.u[k] = gl.getUniformLocation(pr.p, k);     // locations change after relink
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
