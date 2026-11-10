@@ -1,8 +1,9 @@
 /* ── DevOps Tonight: photographic stills, brought to life in plain JavaScript ──
    Every frame is composited here: a background plate, a cut-out presenter, mouth and eye poses blended from a
-   dense set of renders of the same face, a mesh that turns and nods the head and moves the brows, camera moves,
-   grain and graphics. The voice drives it: each line carries a recording, the timing of every sound in it and
-   the pitch of the voice, which become jaw, lip, brow and head movement. */
+   dense set of renders of the same face, a mesh that turns and nods the head, moves the brows, lets the torso
+   breathe and shift and the hair swing, camera moves, grain and graphics. The voice drives it: each line carries a
+   recording, the timing of every sound in it and the pitch of the voice, which become jaw, lip, brow, head and
+   body movement. */
 const ACC = '#2ee6a6';
 const ASSETS = /*ASSETS*/{ img: {}, cast: {} };
 const SPEECH = /*SPEECH*/[];         // per spoken line: the audio, caption words with start times, every phoneme with start, length, loudness, and the voice's pitch
@@ -28,8 +29,8 @@ const SHOW = [
   { who: 'cy', lead: 0.35, split: ['cy', 'dee'], title: 'LIVE · us-east-1', text: 'Dee, did anyone suggest waiting until Monday?' },
   { who: 'dee', lead: 0.85, split: ['cy', 'dee'], title: 'LIVE · us-east-1', sm: [['cy', 0.5, 1, 1], ['dee', 0.8, 1, 0.8]], text: 'One person did, Cy. They have been moved to the platform team. Back to you.' },
   { who: 'paige', lead: 0.4, ots: ['sat', 'CLOUD FORECAST'], sm: [['paige', 0, 0.2, 1], ['paige', 0.72, 1, 0.9]], look: [[7, 9, 0.8, 0.05, 0.4]], text: 'Brave work. Now the cloud forecast, with Sunny Uptime.' },
-  { who: 'sunny', wx: 0, sm: [['sunny', 0, 0.2, 1]], text: 'Thanks, Paige. Pods are stuck Pending across the north while the autoscaler thinks about it.' },
-  { who: 'sunny', wx: 1, sm: [['sunny', 0.78, 1, 1]], text: 'In the south, scattered 503s with a chance of retries. Four nines along the coast, and a high of nine thousand dollars in egress.' },
+  { who: 'sunny', wx: 0, sm: [['sunny', 0, 0.2, 1]], look: [[5, 9, 0.8, 0.05, 0.5]], text: 'Thanks, Paige. Pods are stuck Pending across the north while the autoscaler thinks about it.' },
+  { who: 'sunny', wx: 1, sm: [['sunny', 0.78, 1, 1]], look: [[1, 3, 0.8, 0.1, 0.5], [10, 13, 0.8, 0.02, 0.45]], text: 'In the south, scattered 503s with a chance of retries. Four nines along the coast, and a high of nine thousand dollars in egress.' },
   { who: 'cy', lead: 0.45, split: ['cy', 'mel'], title: 'THE BIG INTERVIEW', text: 'Joining us is Y. A. Mel, Staff YAML Engineer. With agents writing the config now, is your job safe?' },
   { who: 'mel', lead: 0.6, split: ['cy', 'mel'], title: 'THE BIG INTERVIEW', sm: [['cy', 0.75, 1, 0.8]], text: 'Cy, the agent writes four thousand lines of YAML a day. Someone still has to find the one wrong indent.' },
   { who: 'cy', lead: 0.5, split: ['cy', 'mel'], title: 'THE BIG INTERVIEW', shake: [[0, 1]], grave: [[0, 1]], sm: [['mel', 0.45, 1, 0.8]], text: 'Chilling. Thank you for your time.' },
@@ -63,6 +64,12 @@ const VIS = {
 };
 const FULL = 'ɑæaʌɔɒɛɜɪiʊuAIWYOQ', WEAK = 'əɐᵊᵻ', LEAD = 0.28, TAIL = 0.26, DT = 1 / 120;
 const STYLE = { paige: 1, cy: 0.9, dee: 1.2, sunny: 1.25, mel: 0.85 };       // how much each presenter moves
+// How each one carries the body: sway (how far the torso drifts and shifts; more when standing), the spring that free
+// hair hangs on (cycles a second, damping) and how far it swings, and wind for the reporter outdoors.
+const BODY = {
+  paige: { sway: 1, hz: 1.8, damp: 0.32, hair: 1.6 }, cy: { sway: 0.75, hz: 4, damp: 0.5, hair: 0.8 }, dee: { sway: 2, hz: 3.4, damp: 0.42, hair: 1.1, wind: 1 },
+  sunny: { sway: 1.8, hz: 2.4, damp: 0.38, hair: 1.5 }, mel: { sway: 0.9, hz: 4, damp: 0.5, hair: 0 },
+};
 // Monotone cubic interpolation: the curve glides through every target without overshooting.
 function slopes(T, Y) {
   const n = T.length, d = [], m = new Array(n).fill(0);
@@ -100,7 +107,8 @@ function pitchTrack(str) {
   return p;
 }
 const pitchAt = (b, bt) => { const x = (bt - b.lead) * 25, i = Math.floor(x); return x < 0 || i >= b.pc.length - 1 ? 0 : b.pc[i] + (b.pc[i + 1] - b.pc[i]) * (x - i); };
-const POSE = {};                              // per presenter: where the head rests, phrase by phrase, on the show's clock
+// Per presenter, on the show's clock: where head and body rest, phrase by phrase; the breath; and when they speak.
+const POSE = {}, BREATH = {}, SPOKE = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
 function buildSpeech(b) {
   const sp = b.sp, L = b.lead, segs = [], pauses = [], acc = [], who = b.who, sty = STYLE[who] || 1;
   b.words = sp.words.map(w => w[0]); b.wt = sp.words.map(w => w[1] + L); b.text = b.words.join(' '); b.pc = pitchTrack(sp.f0 || '');
@@ -203,21 +211,33 @@ function buildSpeech(b) {
   phr.forEach((p, k) => { if (hash(k, b.ai + 2) < 0.5) blinkAt(p[1] + 0.03 + 0.1 * hash(k, b.ai)); if (k < phr.length - 1 && hash(k, b.ai + 5) < 0.5) mo.back.push([p[1] + 0.2, 0.5]); });
   mo.shakes = (b.shake || []).map(([w0, w1]) => [b.wt[w0] - 0.05, w1 < b.wt.length ? b.wt[w1] : lastEnd + 0.1]);
   // where the head rests during each phrase: it shifts as a new phrase begins, and settles when the line is over
-  const P = POSE[who] = POSE[who] || [{ t: -9, y: 0, p: 0, r: 0 }]; let sgn = P[P.length - 1].y > 0 ? 1 : -1;
+  // The body resettles too, on some phrases, to the side the head turns: x a shift of weight (in eye distances), w a turn
+  // of the shoulders, l a lean towards the camera.
+  const P = POSE[who] = POSE[who] || POSE0.slice(); let sgn = P[P.length - 1].y > 0 ? 1 : -1;
   phr.forEach((p, k) => {
-    sgn = hash(k + 0.5, b.ai) < 0.72 ? -sgn : sgn;
-    P.push({ t: b.start + p[0] - 0.22, y: sgn * (0.1 + 0.3 * hash(k, b.ai + 1)) * sty, p: (hash(k + 0.2, b.ai) - 0.5) * 0.22 * sty, r: (hash(k + 0.4, b.ai) - 0.5) * 0.03 * sty });
+    sgn = hash(k + 0.5, b.ai) < 0.72 ? -sgn : sgn; const z = P[P.length - 1], mv = hash(k + 0.7, b.ai) < 0.45;       // the head resettles for every phrase, the body for fewer than half
+    P.push({ t: b.start + p[0] - 0.22, y: sgn * (0.1 + 0.3 * hash(k, b.ai + 1)) * sty, p: (hash(k + 0.2, b.ai) - 0.5) * 0.22 * sty, r: (hash(k + 0.4, b.ai) - 0.5) * 0.03 * sty,
+      x: mv ? sgn * (0.02 + 0.05 * hash(k + 0.9, b.ai)) * sty : z.x, w: mv ? sgn * (0.15 + 0.4 * hash(k + 0.1, b.ai + 3)) : z.w, l: (hash(k + 0.3, b.ai + 4) - 0.35) * 0.7 });
   });
-  const z = P[P.length - 1]; P.push({ t: b.start + lastEnd + 0.1, y: z.y * 0.35, p: 0, r: z.r * 0.35 });
-  for (const id of b.split || []) if (id !== who) {                // someone listening on screen takes up an attentive tilt
-    const Q = POSE[id] = POSE[id] || [{ t: -9, y: 0, p: 0, r: 0 }];
-    Q.push({ t: b.start + 0.15, y: (hash(b.ai, 7) - 0.5) * 0.3, p: (hash(b.ai, 8) - 0.5) * 0.12, r: (hash(b.ai, 9) < 0.5 ? -1 : 1) * (0.008 + 0.012 * hash(b.ai, 10)) });
+  const z = P[P.length - 1]; P.push({ t: b.start + lastEnd + 0.1, y: z.y * 0.35, p: 0, r: z.r * 0.35, x: z.x * 0.5, w: z.w * 0.4, l: 0 });
+  for (const id of b.split || []) if (id !== who) {                // someone listening on screen takes up an attentive tilt, and leans in a little
+    const Q = POSE[id] = POSE[id] || POSE0.slice(), u = Q[Q.length - 1];
+    Q.push({ t: b.start + 0.15, y: (hash(b.ai, 7) - 0.5) * 0.3, p: (hash(b.ai, 8) - 0.5) * 0.12, r: (hash(b.ai, 9) < 0.5 ? -1 : 1) * (0.008 + 0.012 * hash(b.ai, 10)), x: u.x * 0.5 + (hash(b.ai, 11) - 0.5) * 0.03, w: u.w * 0.4, l: 0.3 });
   }
+  // Breath: in through the gap before each phrase (deeper after a longer gap), slowly out while it is spoken. A level of
+  // -1 means "wherever the quiet breathing between lines has got to" (filled in when the whole show is laid out).
+  const B = BREATH[who] = BREATH[who] || []; let lv = 0;
+  phr.forEach((p, k) => {
+    const gap = k ? p[0] - phr[k - 1][1] : 1, tin = clamp(0.8 * gap, 0.14, 0.6), top = k ? Math.min(1, lv + clamp(1.1 * tin + 0.9 * Math.max(0, gap - 0.3), 0.12, 0.85)) : 1;     // a short gap allows only a quick top-up
+    B.push([b.start + p[0] - 0.04 - tin, k ? lv : -1], [b.start + p[0] - 0.04, top]);
+    lv = Math.max(0.1, top - 0.03 - 0.1 * (p[1] - p[0])); B.push([b.start + p[1], lv]);
+  });
+  (SPOKE[who] = SPOKE[who] || []).push([b.start + first, b.start + lastEnd]);
 }
 // Lays the bulletin out on its clock from a set of recordings. Called once here; the demo page calls it again to switch voices.
 const BEATS = []; let SHOW_LEN = 0;
 function buildShow(speech) {
-  BEATS.length = 0; SHOW_LEN = 0; for (const k in POSE) delete POSE[k]; const seen = {}; let phi = 0;
+  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
   SHOW.forEach(L => {
     const b = Object.assign({ start: SHOW_LEN }, L);
     if (L.text && !L.split) { b.strap = !seen[L.who]; seen[L.who] = true; }      // name strap the first time someone is on camera
@@ -230,6 +250,17 @@ function buildShow(speech) {
     BEATS.push(b); SHOW_LEN += b.dur;
   });
   BEATS.forEach(b => { let e = b.start + b.dur; for (const o of BEATS) if (o.shot0 === b.shot0) e = Math.max(e, o.start + o.dur); b.shotLen = e - b.shot0; });
+  // Between lines everyone breathes quietly (in for about a second and a half, out for two and a half); those breaths are
+  // joined to the ones taken for speech, so a presenter who stays on screen never skips a beat.
+  for (const who in BREATH) {
+    const T = [-8], Y = [0.4]; let n = 0;
+    const idle = until => { for (;;) { const k = T.length - 1, up = Y[k] < 0.5, d = (up ? 1.5 : 2.4) * (0.85 + 0.3 * hash(n, who.length)); if (T[k] + d > until) return; n++; T.push(T[k] + d); Y.push(up ? 0.62 + 0.08 * hash(n, 3) : 0.34 + 0.06 * hash(n, 5)); } };
+    for (const [t, lv] of BREATH[who]) {
+      if (lv < 0) { idle(t - 0.3); const k = T.length - 1, up = Y[k] < 0.5, f = clamp((t - T[k]) / (up ? 1.5 : 2.4), 0, 1); T.push(Math.max(t, T[k] + 0.05)); Y.push(up ? Y[k] + 0.2 * f : Y[k] - 0.25 * f); }
+      else { T.push(Math.max(t, T[T.length - 1] + 0.02)); Y.push(lv); }
+    }
+    idle(SHOW_LEN + 8); BREATH[who] = { T, Y, M: slopes(T, Y) };
+  }
 }
 buildShow(SPEECH);
 const TICKER = '  ●  Kubernetes still the answer, question unclear  ●  platform team renames itself again  ●  terraform plan: 1 to add, 0 to change, 312 to destroy  ●  OpenTelemetry now observing the observers  ●  SBOM found to contain another SBOM  ●  cloud bill arrives, CFO joins incident channel  ●  change freeze begins, three hotfixes ship  ●  MTTR down, vibes mixed';
@@ -288,14 +319,23 @@ function postureAt(P, ts) {                  // every shift eases in over about 
   for (let k = 1; k < P.length && P[k].t < ts; k++) { const e = rise(ts, P[k].t, P[k].t + 0.55); y += (P[k].y - P[k - 1].y) * e; p += (P[k].p - P[k - 1].p) * e; r += (P[k].r - P[k - 1].r) * e; }
   return [y, p, r];
 }
+function bodyPostureAt(P, ts) {              // the body takes about a second over what the head does in half
+  let x = P[0].x, w = P[0].w, l = P[0].l;
+  for (let k = 1; k < P.length && P[k].t - 0.05 < ts; k++) { const e = rise(ts, P[k].t - 0.05, P[k].t + 1.05); x += (P[k].x - P[k - 1].x) * e; w += (P[k].w - P[k - 1].w) * e; l += (P[k].l - P[k - 1].l) * e; }
+  return [x, w, l];
+}
+const breathAt = (id, ts) => { const B = BREATH[id]; return B && B.T ? curve(B.T, B.Y, B.M, ts) : 0.45; };      // how full the lungs are, 0..1
+// A presenter who is not speaking wears the photograph's own slight smile; it lets go just before they speak and comes back after.
+function restAt(id, ts) { let w = 1; for (const [t0, t1] of SPOKE[id] || []) w = Math.min(w, 1 - rise(ts, t0 - 0.45, t0 - 0.15) * (1 - rise(ts, t1 + 0.35, t1 + 1.1))); return w; }
 const nodShape = x => gauss(x - 0.03, 0.085) - 0.3 * gauss(x + 0.17, 0.07);               // a small lift, the drop on the syllable, the return
 const holdShape = (x, hold) => rise(x, -0.18, -0.02) * (1 - rise(x, hold, hold + 0.32));
 /* Everything about one face at one moment. b / bt: the line on air and how far into it; ts: the show's clock.
-   Returns mouth (o, s, g = smile), eyes (blink, gx, gy), brows (bu, bd) and head (yaw, pit, roll: yaw and pit
-   in units of the measured turn and nod, roll in radians), plus how animated the speaker is (emph) for the body. */
+   Returns mouth (o, s, g = smile: 0 relaxed for speech, 0.5 the photograph's own expression, 1 a broad smile), eyes
+   (blink, gx, gy), brows (bu, bd) and head (yaw, pit, roll: yaw and pit in units of the measured turn and nod, roll
+   in radians), plus how animated the speaker is (emph) for the body. */
 function faceAt(id, b, bt, ts, still) {
   const a = ACT[id], sd = a.m.seed, sty = STYLE[id] || 1, talk = b.sp && b.who === id, mo = b.mo, sp = talk ? speechAt(b, bt, id) : null;
-  const P = postureAt(POSE[id] || [{ t: 0, y: 0, p: 0, r: 0 }], ts), q = { o: sp ? sp.o : 0, s: sp ? sp.s : 0, g: b.sp ? smileAt(b, bt, id) : 0, on: !!(sp && sp.on) };
+  const P = postureAt(POSE[id] || POSE0, ts), q = { o: sp ? sp.o : 0, s: sp ? sp.s : 0, g: Math.max(b.sp ? smileAt(b, bt, id) : 0, 0.5 * restAt(id, ts)), on: !!(sp && sp.on) };
   let yaw = P[0] + 0.07 * wob(ts * 0.5, sd), pit = P[1] + 0.05 * wob(ts * 0.6, sd + 3), roll = P[2] + 0.0035 * wob(ts * 0.45, sd + 7), bu = 0, bd = 0, emph = 0, blink = 0;
   // the eyes dart a little all the time
   const slot = Math.floor(ts / 0.85), tg = k => [(hash(k, sd) - 0.5) * 0.5, hash(k + 0.3, sd) < 0.2 ? 0.3 * hash(k + 0.7, sd) : 0], g0 = tg(slot - 1), g1 = tg(slot);
@@ -338,6 +378,7 @@ function region(a, x, mask, r, layers) {
 }
 // Mouth poses form a grid: jaw opening along one axis (12 steps with neutral lips, 8 on the other rows), and across it
 // lips fully rounded, half rounded, neutral, half spread, fully spread. A smile has a row of its own.
+// "Neutral" is a relaxed mouth, made for speaking; the photograph's own closed-lip smile is the half-smile pose (g = 0.5).
 const JAW = 46;                                                  // jaw units at an opening of 1; the widest pose is 60
 function mouthLayers(a, o, s, g) {
   g *= 1 - 0.6 * Math.max(0, -s);                                // lips cannot round and smile at once: the smile gives way
@@ -355,7 +396,7 @@ function mouthLayers(a, o, s, g) {
   return out;
 }
 function eyeLayers(a, q) {
-  const E = a.eye, b = q.blink, open = 1 - Math.min(1, 2 * b), w = [['gl', Math.max(0, -q.gx)], ['gr', Math.max(0, q.gx)], ['gd', q.gy], ['smile', 0.85 * q.g]];
+  const E = a.eye, b = q.blink, open = 1 - Math.min(1, 2 * b), w = [['gl', Math.max(0, -q.gx)], ['gr', Math.max(0, q.gx)], ['gd', q.gy], ['smile', 0.85 * clamp(2 * q.g - 1, 0, 1)]];      // the eyes join in only for a smile broader than the photograph's own
   let sum = 0; for (const l of w) sum += l[1]; const k = open / Math.max(1, sum);
   return w.map(l => [E[l[0]], l[1] * k]).concat([[E.half, b <= 0.5 ? 2 * b : 2 - 2 * b], [E.closed, Math.max(0, 2 * b - 1)]]);
 }
@@ -363,18 +404,35 @@ function compose(a, q) {
   const x = a.px; x.globalCompositeOperation = 'copy'; x.globalAlpha = 1; x.drawImage(a.fg, 0, 0); x.globalCompositeOperation = 'source-over';
   region(a, a.mx, a.mMask, a.m.mouth, mouthLayers(a, q.o, q.s, q.g)); region(a, a.ex, a.eMask, a.m.eyes, eyeLayers(a, q));
 }
-/* The head. A mesh lies over the picture; six measured displacement fields say where each point of the face goes when
-   the head turns right or left, nods down or up, and when the brows rise or lower. The mesh is moved by a weighted sum
-   of them (plus a tilt about the neck), so the nose travels further than the ears and the brows really move.
+/* The head and the body. A mesh lies over the picture; six measured displacement fields say where each point of the
+   face goes when the head turns right or left, nods down or up, and when the brows rise or lower. The mesh is moved by
+   a weighted sum of them (plus a tilt about the neck), so the nose travels further than the ears and the brows really move.
+   Three maps of the picture (made from a face-parsing network's labels) say what else may move: how much a point
+   belongs to the torso, how free the hair is there, and how exposed it is to wind. With them the same mesh lets the
+   torso shift, tilt, lean, turn and breathe with the head riding on it, and lets loose hair hang back and swing.
+   Where the picture meets the frame it is pinned: nothing moves up or down at the bottom edge, or sideways at the side
+   edges, so the figure never lifts off the edge of the frame (it may slide along it, as a leaning body does).
    This is a second, small WebGL canvas; its picture is drawn back into the 2D frame. */
 const warpGL = (() => {
   const cv = mkCanvas(FW, FH); let gl = null;
   try { gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true }); } catch (e) {}
   if (!gl) return null;
   const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }, pr = gl.createProgram();
-  gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 aP; attribute vec4 aA, aB, aC; attribute float aK; uniform vec4 uW, uV, uT; varying vec2 vUV;
+  // aM = (torso, free hair, wind). uBd = the torso's shift, tilt and lean, about the point uBc.xy; uBc.zw = the
+  // torso's middle and 1 / half its width; uBr = (breath lift, breath widening, turn of the shoulders, how much of the
+  // lift the head takes); uHr.xy = where free hair hangs relative to the head, uHr.zw = the shoulder line and 1 / the
+  // distance below it over which a turn of the shoulders reaches its full size (the collar is near the axis of the
+  // turn and hardly moves; the middle of the chest is well in front of it); uWd = (wind, flutter, time);
+  // uPin = how far in from the side edges and up from the bottom edge the pinning reaches.
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 aP; attribute vec4 aA, aB, aC; attribute vec3 aM; attribute float aK; uniform vec4 uW, uV, uT, uBd, uBc, uBr, uHr, uWd; uniform vec2 uPin; varying vec2 vUV;
     void main() { vec2 d = aA.xy * uW.x + aA.zw * uW.y + aB.xy * uW.z + aB.zw * uW.w + aC.xy * uV.x + aC.zw * uV.y;
-      d += aK * (uT.xy + uV.z * vec2(uT.w - aP.y, aP.x - uT.z)); vec2 p = aP + d;
+      d += aK * (uT.xy + uV.z * vec2(uT.w - aP.y, aP.x - uT.z));
+      vec2 q = aP - uBc.xy; float u = (aP.x - uBc.z) * uBc.w; vec2 t = uBd.xy + uBd.z * vec2(-q.y, q.x) + uBd.w * q;
+      t.y -= uBr.x * mix(uBr.w, 1.0, aM.x); t.x += aM.x * (uBr.y * (aP.x - uBc.z) + uBr.z * max(0.0, 1.0 - u * u) * mix(0.35, 1.0, smoothstep(0.0, 1.0, (aP.y - uHr.z) * uHr.w)));
+      float ph = dot(aP, vec2(0.05, 0.035));
+      t += aM.y * uHr.xy + aM.z * (uWd.xy * (0.75 + 0.25 * sin(ph * 0.7 - uWd.w * 3.1)) + uWd.z * vec2(sin(ph - uWd.w * 8.3), 0.5 * sin(ph * 1.31 - uWd.w * 6.1)));
+      d += t * vec2(smoothstep(0.0, uPin.x, aP.x) * smoothstep(0.0, uPin.x, ${FW}.0 - aP.x), smoothstep(0.0, uPin.y, ${FH}.0 - aP.y));
+      vec2 p = aP + d;
       gl_Position = vec4(p.x / ${FW / 2}.0 - 1.0, 1.0 - p.y / ${FH / 2}.0, 0.0, 1.0); vUV = aP / vec2(${FW}.0, ${FH}.0); }`));
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#ifdef GL_FRAGMENT_PRECISION_HIGH
     precision highp float;
@@ -383,8 +441,8 @@ const warpGL = (() => {
     #endif
     uniform sampler2D uS; varying vec2 vUV; void main() { gl_FragColor = texture2D(uS, vUV); }`));
   gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return null;
-  gl.useProgram(pr); const loc = {}; for (const n of ['aP', 'aA', 'aB', 'aC', 'aK']) { loc[n] = gl.getAttribLocation(pr, n); gl.enableVertexAttribArray(loc[n]); }
-  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT');
+  gl.useProgram(pr); const loc = {}; for (const n of ['aP', 'aA', 'aB', 'aC', 'aK', 'aM']) { loc[n] = gl.getAttribLocation(pr, n); gl.enableVertexAttribArray(loc[n]); }
+  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin');
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture()); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.viewport(0, 0, FW, FH);
@@ -393,11 +451,17 @@ const warpGL = (() => {
   function mesh(a) {                                             // a grid over the whole frame, in step with the grid the fields were measured on
     const F = a.m.flow, f = a.m.face, st = F.step, i0 = Math.ceil(F.x / st), j0 = Math.ceil(F.y / st), nx = i0 + Math.ceil((FW - F.x) / st) + 1, ny = j0 + Math.ceil((FH - F.y) / st) + 1;
     const fl = F.f.map(([s, d]) => { const bin = atob(d), v = new Float32Array(bin.length); for (let i = 0; i < bin.length; i++) { const k = bin.charCodeAt(i); v[i] = (k > 127 ? k - 256 : k) / s; } return v; });
-    const V = new Float32Array(nx * ny * 15), cx = f.cx, cy = f.cy - 0.1 * f.iod, R = 3.3 * f.iod; let p = 0;
+    const V = new Float32Array(nx * ny * 18), cx = f.cx, cy = f.cy - 0.1 * f.iod, R = 3.3 * f.iod, B = a.m.body; let p = 0;
+    const map = k => { if (!B || !B[k]) return null; const bin = atob(B[k]), v = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) v[i] = bin.charCodeAt(i); return v; }, mb = map('b'), mh = map('h'), mw = map('w');
+    const at = (m, x, y) => {                                      // a map's value at a point of the picture (the maps are on a coarse grid)
+      if (!m) return 0; const gx = Math.min(x / B.step, B.cols - 1.001), gy = Math.min(y / B.step, B.rows - 1.001), i = Math.floor(gx), j = Math.floor(gy), fx = gx - i, fy = gy - j, k = j * B.cols + i;
+      return ((m[k] * (1 - fx) + m[k + 1] * fx) * (1 - fy) + (m[k + B.cols] * (1 - fx) + m[k + B.cols + 1] * fx) * fy) / 255;
+    };
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const x = clamp(F.x + (i - i0) * st, 0, FW), y = clamp(F.y + (j - j0) * st, 0, FH), gi = i - i0, gj = j - j0, ok = gi >= 0 && gi < F.cols && gj >= 0 && gj < F.rows, o = (gj * F.cols + gi) * 2;
       V[p++] = x; V[p++] = y; for (const v of fl) { V[p++] = ok ? v[o] : 0; V[p++] = ok ? v[o + 1] : 0; }
       const r2 = ((x - cx) * (x - cx) + (y - cy) * (y - cy)) / (R * R); V[p++] = r2 < 1 ? (1 - r2) * (1 - r2) : 0;                    // how much of a tilt this point takes: all at the face, none at the shoulders
+      V[p++] = at(mb, x, y); V[p++] = at(mh, x, y); V[p++] = at(mw, x, y);
     }
     const I = new Uint16Array((nx - 1) * (ny - 1) * 6); p = 0;
     for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) { const k = j * nx + i; I[p++] = k; I[p++] = k + 1; I[p++] = k + nx; I[p++] = k + 1; I[p++] = k + nx + 1; I[p++] = k + nx; }
@@ -405,13 +469,20 @@ const warpGL = (() => {
     const ibo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW);
     return { vbo, ibo, n: I.length };
   }
-  w.draw = (a, q) => {
-    const m = a.mesh || (a.mesh = mesh(a)), f = a.m.face;
+  w.draw = (a, q, bd, ts) => {
+    const m = a.mesh || (a.mesh = mesh(a)), f = a.m.face, B = a.m.body;
     gl.bindBuffer(gl.ARRAY_BUFFER, m.vbo); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
-    gl.vertexAttribPointer(loc.aP, 2, gl.FLOAT, false, 60, 0); gl.vertexAttribPointer(loc.aA, 4, gl.FLOAT, false, 60, 8); gl.vertexAttribPointer(loc.aB, 4, gl.FLOAT, false, 60, 24);
-    gl.vertexAttribPointer(loc.aC, 4, gl.FLOAT, false, 60, 40); gl.vertexAttribPointer(loc.aK, 1, gl.FLOAT, false, 60, 56);
+    gl.vertexAttribPointer(loc.aP, 2, gl.FLOAT, false, 72, 0); gl.vertexAttribPointer(loc.aA, 4, gl.FLOAT, false, 72, 8); gl.vertexAttribPointer(loc.aB, 4, gl.FLOAT, false, 72, 24);
+    gl.vertexAttribPointer(loc.aC, 4, gl.FLOAT, false, 72, 40); gl.vertexAttribPointer(loc.aK, 1, gl.FLOAT, false, 72, 56); gl.vertexAttribPointer(loc.aM, 3, gl.FLOAT, false, 72, 60);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, a.pf);
-    gl.uniform4f(uW, Math.max(0, q.yaw), Math.max(0, -q.yaw), Math.max(0, q.pit), Math.max(0, -q.pit)); gl.uniform4f(uV, q.bu, q.bd, q.roll, 0); gl.uniform4f(uT, 0, 0, f.cx, f.cy + 1.6 * f.iod);
+    gl.uniform4f(uW, Math.max(0, q.yaw), Math.max(0, -q.yaw), Math.max(0, q.pit), Math.max(0, -q.pit)); gl.uniform4f(uV, q.bu, q.bd, q.roll, 0); gl.uniform4f(uT, 0, 0, f.cx, f.cy + 1.6 * f.iod); gl.uniform2f(uPin, 0.45 * f.iod, 0.5 * f.iod);
+    if (bd && B) {
+      // The torso tilts about a point at the waist (below the frame) and leans about the face, so a lean makes the head a
+      // touch larger where it is; both are folded into one shift-plus-turn about the face.
+      const wy = B.sy + 2.6 * f.iod;
+      gl.uniform4f(uBd, bd.sx - bd.rot * (f.cy - wy), bd.sy + bd.rot * (f.cx - B.cx), bd.rot, bd.lean); gl.uniform4f(uBc, f.cx, f.cy, B.cx, 1 / B.r);
+      gl.uniform4f(uBr, bd.lift, bd.wide, bd.tw, 0.25); gl.uniform4f(uHr, bd.hx, bd.hy, B.sy, 1 / (1.4 * f.iod)); gl.uniform4f(uWd, bd.wx, bd.wy, bd.wa, ts % 600);
+    } else { gl.uniform4f(uBd, 0, 0, 0, 0); gl.uniform4f(uBc, f.cx, f.cy, f.cx, 0.002); gl.uniform4f(uBr, 0, 0, 0, 0); gl.uniform4f(uHr, 0, 0, 0, 0); gl.uniform4f(uWd, 0, 0, 0, 0); }
     gl.clear(gl.COLOR_BUFFER_BIT); gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_SHORT, 0);
   };
   return w;
@@ -432,18 +503,48 @@ function warpFlat(a, tx, ty, rot) {
   }
   return a.wf;
 }
-// Draws in frame coordinates (the caller sets the camera). o: { b, bt (the line on air), zb, zf, noBg, mid(), still }
+/* The body at one moment. The torso drifts a little all the time, resettles with the phrases, dips into what is being
+   stressed, turns part of the way with the head, and breathes: in before a phrase, out while it is spoken. Loose hair
+   hangs on a spring behind the head: it follows late and swings past. Returns pixels and radians for the mesh. */
+function bodyAt(id, q, ts) {
+  const a = ACT[id], iod = a.m.face.iod, K = BODY[id] || BODY.cy, sd = a.m.seed, P = bodyPostureAt(POSE[id] || POSE0, ts), air = breathAt(id, ts), e = q.on ? 1 : 0.6;
+  const d = a.dyn || (a.dyn = { t: -1e9 }), dt = ts - d.t, cut = dt < 0 || dt > 0.25;      // the clock jumped (a cut, a seek): start afresh
+  d.yaw = cut ? q.yaw : d.yaw + (q.yaw - d.yaw) * (1 - Math.exp(-dt / 0.3));                // the shoulders follow a turn of the head slowly, and not its quick movements
+  d.em = cut ? q.emph : d.em + (q.emph - d.em) * (1 - Math.exp(-dt / 0.12));                // and dip into a stressed word a moment after the head does
+  const o = {
+    sx: iod * (P[0] + 0.04 * K.sway * e * wob(ts * 0.31, sd + 11) + 0.03 * d.yaw),          // a shift of weight
+    sy: iod * (0.02 * P[2] + 0.022 * d.em + 0.012 * K.sway * wob(ts * 0.23, sd + 17)),       // down a little into a stressed word
+    rot: 0.004 * K.sway * e * wob(ts * 0.26, sd + 13) + 0.05 * P[0] - 0.15 * q.roll,         // the shoulder line tilts, a hair against the head
+    lean: 0.004 * P[2] + 0.008 * d.em,                                                     // towards the camera
+    tw: iod * 0.1 * (P[1] + 0.8 * d.yaw),                                                    // the shoulders turn: the middle of the chest moves, the outline hardly
+    lift: iod * 0.11 * (air - 0.4), wide: 0.007 * (air - 0.4), hx: 0, hy: 0, wx: 0, wy: 0, wa: 0,
+  };
+  // where the head is on screen; the hair's spring follows that point
+  const hx = o.sx + 0.11 * iod * q.yaw, hy = o.sy - 0.25 * o.lift + 0.08 * iod * q.pit;
+  if (cut) { d.x = hx; d.y = hy; d.vx = d.vy = 0; }
+  else if (dt > 0) {
+    const n = Math.ceil(dt / 0.004), h = dt / n, w = 6.2832 * K.hz, k = w * w, cd = 2 * K.damp * w;
+    for (let i = 1; i <= n; i++) { const tx = d.px + (hx - d.px) * i / n, ty = d.py + (hy - d.py) * i / n; d.vx += h * (k * (tx - d.x) - cd * d.vx); d.x += h * d.vx; d.vy += h * (k * (ty - d.y) - cd * d.vy); d.y += h * d.vy; }
+  }
+  d.t = ts; d.px = hx; d.py = hy;
+  const lim = 0.14 * iod; o.hx = clamp(K.hair * (d.x - hx), -lim, lim); o.hy = clamp(0.6 * K.hair * (d.y - hy), -lim, lim);
+  if (K.wind) { const g = 0.5 + 0.5 * wob(ts * 0.8, 21); o.wx = -iod * K.wind * (0.012 + 0.03 * g); o.wy = iod * K.wind * 0.006 * g; o.wa = iod * K.wind * 0.011 * (0.4 + 0.6 * g); }      // gusts, and a flutter that grows with them
+  return o;
+}
+// Draws in frame coordinates (the caller sets the camera). o: { b, bt (the line on air), zb, zf, noBg, mid(), still, rigid }
+// still: no head or body movement; rigid: the head moves but the body and hair stay as photographed.
 function drawActor(id, ts, o) {
-  const a = ACT[id], f = a.m.face, s = a.m.seed, q = faceAt(id, o.b, o.bt, ts, o.still), e = q.on ? 1 : 0.3, mv = o.still ? 0 : 1;
+  const a = ACT[id], f = a.m.face, q = faceAt(id, o.b, o.bt, ts, o.still), bd = o.still || o.rigid ? null : bodyAt(id, q, ts), gl = warpGL && warpGL.ok;
   compose(a, q);
-  let pic; if (warpGL && warpGL.ok) { warpGL.draw(a, q); pic = warpGL.cv; } else pic = warpFlat(a, q.yaw * 0.11 * f.iod, q.pit * 0.08 * f.iod, q.roll);
+  let pic; if (gl) { warpGL.draw(a, q, bd, ts); pic = warpGL.cv; } else pic = warpFlat(a, q.yaw * 0.11 * f.iod, q.pit * 0.08 * f.iod, q.roll);
   if (!o.noBg) { c.save(); c.translate(f.cx, f.cy); c.scale(o.zb, o.zb); c.translate(-f.cx, -f.cy); c.drawImage(a.bg, 0, 0); c.restore(); }
   if (o.mid) o.mid();
   c.save();
-  // the body: a slow sway about a point below the frame, leaning a hair against the head's tilt and into what is being stressed; and breathing
-  c.translate(f.cx, FH + 260); c.rotate(mv * ((0.0032 * Math.sin(ts * 0.53 + s) + 0.0018 * Math.sin(ts * 1.31 + s * 2)) * (0.6 + 0.4 * e) - 0.15 * q.roll)); c.translate(-f.cx, -(FH + 260));
   c.translate(f.cx, f.cy); c.scale(o.zf, o.zf); c.translate(-f.cx, -f.cy);
-  c.translate(f.cx, FH); c.scale(1 + mv * 0.004 * q.emph, 1 + mv * (0.004 * q.emph + 0.0035 * Math.sin(ts * 1.5 + s * 1.9))); c.translate(-f.cx, -FH);
+  if (!gl && bd) {                 // without the mesh the whole figure leans from its bottom edge (which stays where it is) and rises a little with the breath
+    c.transform(1, 0, -bd.sx / (FH - f.cy), 1, bd.sx * FH / (FH - f.cy), 0);
+    c.translate(f.cx, FH); c.scale(1, 1 + bd.lean + 0.6 * bd.lift / (FH - f.cy)); c.translate(-f.cx, -FH);
+  }
   c.drawImage(pic, 0, 0);
   c.restore();
 }
