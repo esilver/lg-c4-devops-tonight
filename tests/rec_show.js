@@ -9,8 +9,13 @@ const { chromium } = require('playwright'); const fs = require('fs');
   await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0, null, { timeout: 30000 }); await p.waitForTimeout(400);
   const info = await p.evaluate(() => ({ len: SHOW_LEN, beats: BEATS.map(b => ({ ai: b.ai == null ? -1 : b.ai, start: b.start, dur: b.dur, kind: b.kind, lead: b.lead || 0 })) }));
   fs.writeFileSync(`${dir}/timing.json`, JSON.stringify(info)); const n = Math.floor(info.len * fps);
+  // The ticker shows the time of day. Frames are rendered several times slower than they play, so the page's clock is
+  // made to follow the bulletin's own time: it starts at the moment rendering starts and advances with the picture.
+  // (Before this, the clock in the video gained several minutes in two.)
+  await p.evaluate(() => { const Real = Date, base = Real.now(); window.__showT = 0;
+    window.Date = class extends Real { constructor(...a) { if (a.length) super(...a); else super(base + window.__showT * 1000); } static now() { return base + window.__showT * 1000; } }; });
   for (let i = 0; i < n; i++) {
-    const url = await p.evaluate(t => { readyAt = 0; switchedAt = -10; c.save(); chNews(t); c.restore(); return scr.toDataURL('image/jpeg', 0.92); }, i / fps);
+    const url = await p.evaluate(t => { window.__showT = t; readyAt = 0; switchedAt = -10; c.save(); chNews(t); c.restore(); return scr.toDataURL('image/jpeg', 0.92); }, i / fps);
     fs.writeFileSync(`${dir}/f${String(i).padStart(5, '0')}.jpg`, Buffer.from(url.split(',')[1], 'base64'));
   }
   console.log('frames', n, 'seconds', info.len.toFixed(2), 'errors:', errs); await b.close();

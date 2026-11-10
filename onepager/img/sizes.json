@@ -1,0 +1,82 @@
+{
+ "hero.jpg": [
+  1500,
+  967
+ ],
+ "cast_paige.jpg": [
+  520,
+  292
+ ],
+ "cast_cy.jpg": [
+  520,
+  292
+ ],
+ "cast_dee.jpg": [
+  520,
+  292
+ ],
+ "cast_sunny.jpg": [
+  520,
+  292
+ ],
+ "cast_mel.jpg": [
+  520,
+  292
+ ],
+ "matte_photo.jpg": [
+  520,
+  292
+ ],
+ "matte_alpha.jpg": [
+  520,
+  292
+ ],
+ "matte_cut.jpg": [
+  520,
+  292
+ ],
+ "matte_plate.jpg": [
+  520,
+  292
+ ],
+ "poses.jpg": [
+  1650,
+  940
+ ],
+ "w2l.jpg": [
+  1284,
+  301
+ ],
+ "phon.jpg": [
+  1500,
+  354
+ ],
+ "flow_turn.jpg": [
+  640,
+  614
+ ],
+ "flow_nod.jpg": [
+  640,
+  614
+ ],
+ "body_paige.jpg": [
+  760,
+  428
+ ],
+ "body_dee.jpg": [
+  760,
+  428
+ ],
+ "breath.jpg": [
+  1650,
+  309
+ ],
+ "chart.png": [
+  1650,
+  895
+ ],
+ "motion.png": [
+  1650,
+  1350
+ ]
+}

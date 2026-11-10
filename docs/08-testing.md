@@ -117,3 +117,38 @@ against the photograph, and each line's typical and widest opening. `lipsync_che
 opening the page drew, which is how the mapping of the lip reference was debugged. `ios_sound_check.js` is new: it taps the Sound button on both pages in Chromium emulating an iPhone and reports the
 button's label, the silent keep-alive element, the audio session type and the audio context's state. That proves the
 iPhone-only code runs, not that a ringer switch is overridden.
+
+## Added in request 11
+
+Body and hair movement cannot be judged from one still frame, and the agent cannot watch a moving one, so it is
+measured. `body_check.js <presenter> <dir>` plays a presenter's lines in the demo page three times with the camera,
+grain and captions off: as shown, with the hair's spring and the wind off, and with body and hair off. It writes every
+frame, what the engine asked of the body at that moment, and a few points worth watching (shoulders, chest, the bridge
+of the nose, the loosest hair, the most wind-blown hair). `body_check.py <dir>` runs dense optical flow between
+matching frames of the three recordings, reads it at those points, and sets it against the shader's own arithmetic
+worked out again in Python. It also reports how far and how fast the shoulders move, how far the body carries the
+head, and whether the figure ever lifts off the bottom edge of the picture (by counting how much of the bottom row it
+covers; optical flow is not trustworthy in the last rows of a picture). `body_plot.py <dir> <out.png>` draws the
+result: six small charts on one time axis.
+
+| Script | What it does | Typical call, from `tests/output/` |
+|---|---|---|
+| `body_check.js` | Records one presenter three ways and logs what the engine asked for | `node ../body_check.js paige body_paige` |
+| `body_check.py` | Measures the frames and compares | `../../gen/venv6/bin/python ../body_check.py body_paige` |
+| `body_plot.py` | Draws the chart | `../../gen/venv6/bin/python ../body_plot.py body_paige body/body_paige.png 15` |
+
+The frames themselves (about 2,400 a presenter) are not kept; `tests/output/body_check.txt`, `body/measured_<name>.json`
+and `body/body_<name>.png` are. The results are in [15](15-body-hair-and-looser-lips.md): the measured movement agrees
+with what was asked to about a tenth of a pixel on shoulders, chest and head, and to a third of a pixel on hair.
+
+`poses.js`, `phoneme_strip.js`, `errs.js`, `demo_check.js`, `ios_sound_check.js` and `sound_check.js` were run again on
+the final build. `demo_check.js` now pauses at 1.9 s for its first screenshot; at 2.4 s the anchor is mid-blink.
+
+Still not checked, as before: nobody watched or listened, and only Chromium was run.
+
+## Added in request 12
+
+`rec_show.js` now makes the page's clock follow the bulletin's own time while it renders. Before, the time of day in
+the ticker was read from the computer's clock while frames were rendered several times slower than they play, so the
+clock in every rendered video gained several minutes in two. Checked by reading the clock off two frames of the
+new video, 94 seconds apart: 12:27 and 12:29.

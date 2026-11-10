@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How DevOps Tonight Was Animated</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* The bulletin's own broadcast graphics, turned into a page: its navy, its mint, its name straps and its ticker.
+     One column, 1120 px at most. Each step opens with a strap like the ones that name the presenters on air;
+     short steps put the words beside the picture, wide pictures run the full width. One world, so one theme. */
+  :root {
+    color-scheme: dark;
+    --bg: #070d1b; --panel: #0e1730; --line: #25345a; --ink: #eef2fb; --muted: #a3b2d0;
+    --accent: #2ee6a6; --live: #e23b2e;
+    --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 var(--body); }
+  img { display: block; max-width: 100%; height: auto; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  main { max-width: 1152px; margin: 0 auto; padding: 0 16px 56px; display: grid; gap: 44px; }
+
+  /* the channel band across the top, as on air */
+  .band { background: var(--panel); border-bottom: 2px solid var(--accent); }
+  .band div { max-width: 1152px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font: 500 13px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .bug { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font: 700 19px var(--display); letter-spacing: .05em; }
+  .bug svg { width: 26px; height: 26px; }
+  .tally { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
+  .tally::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--live); }
+
+  header { display: grid; gap: 18px; padding-top: 34px; }
+  h1 { margin: 0; font: 700 clamp(44px, 7.4vw, 86px)/0.95 var(--display); letter-spacing: .005em; text-transform: uppercase; text-wrap: balance; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .deck { margin: 0; max-width: 66ch; font-size: 19px; color: var(--ink); }
+  .facts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .facts li { background: var(--panel); padding: 13px 14px 12px; display: grid; gap: 2px; }
+  .facts b { font: 700 38px/1 var(--display); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .facts span { font-size: 13.5px; line-height: 1.35; color: var(--muted); }
+
+  figure { margin: 0; display: grid; gap: 8px; }
+  figure img { border: 1px solid var(--line); }
+  figcaption { font-size: 14px; line-height: 1.45; color: var(--muted); max-width: 86ch; }
+
+  section { display: grid; gap: 18px; }
+  .strap { display: flex; align-items: stretch; background: var(--panel); border-left: 6px solid var(--accent); }
+  .strap .no { display: grid; place-items: center; padding: 0 14px; font: 500 15px var(--mono); color: var(--accent); border-right: 1px solid var(--line); }
+  .strap h2 { margin: 0; padding: 9px 16px 8px; font: 700 31px/1.05 var(--display); letter-spacing: .02em; text-transform: uppercase; text-wrap: balance; }
+  .with { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; font: 500 12.5px var(--mono); color: var(--muted); }
+  .with i { font-style: normal; color: var(--ink); border: 1px solid var(--line); background: var(--panel); border-radius: 4px; padding: 2px 8px; }
+  .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 26px; align-items: start; }
+  .words { display: grid; gap: 12px; }
+  .words p { margin: 0; max-width: 62ch; }
+  .tiles { display: grid; gap: 8px; }
+  .tiles.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .tiles.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tiles figcaption { font: 500 12.5px var(--mono); color: var(--ink); }
+  .tiles figcaption small { display: block; font: 400 12.5px var(--body); color: var(--muted); }
+
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font: 500 12.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  td:last-child { color: var(--muted); }
+  .notes { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; max-width: 78ch; }
+  .notes li { padding-left: 16px; border-left: 2px solid var(--line); color: var(--muted); }
+  .notes b { color: var(--ink); font-weight: 600; }
+  footer { border-top: 2px solid var(--accent); padding-top: 14px; font: 500 13px var(--mono); color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 22px; }
+  @media (max-width: 760px) {
+    html, body { font-size: 16px; }
+    .split { grid-template-columns: minmax(0, 1fr); }
+    .tiles.five, .tiles.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .strap h2 { font-size: 25px; }
+  }
+</style>
+</head>
+<body>
+<div class="band"><div>
+  <span class="bug"><svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="4" fill="#2ee6a6"/><path d="M13 13c-2.2-3.4-6.6-3.4-6.6 0s4.4 3.4 6.6 0c2.2-3.4 6.6-3.4 6.6 0s-4.4 3.4-6.6 0z" fill="none" stroke="#06281d" stroke-width="2.2" stroke-linecap="round"/></svg>DevOps Tonight</span>
+  <span>How it was made</span>
+  <span class="tally">Every model ran locally, on a CPU</span>
+</div></div>
+<main>
+  <header>
+    <h1>Five newsreaders who do not exist, <em>animated without a video model</em></h1>
+    <p class="deck">DevOps Tonight is a two-minute satirical bulletin that plays on a television drawn in WebGL. Each presenter is one generated photograph. Local models re-pose that photograph, time the voice and work out what the mouth should do. The browser then blends the poses live in plain JavaScript.</p>
+    <ul class="facts">
+      <li><b>0</b><span>video models, and no video file in the page</span></li>
+      <li><b>1</b><span>photograph for each presenter</span></li>
+      <li><b>65</b><span>poses rendered from it</span></li>
+      <li><b>321</b><span>small images in the page, blended live</span></li>
+      <li><b>4</b><span>CPU cores did all of it; no GPU</span></li>
+      <li><b>4.4 MB</b><span>one HTML file, no libraries</span></li>
+    </ul>
+    <figure>
+      <img src="img/hero.jpg" width="1500" height="967" alt="A television on a wooden sideboard. On its screen a woman in a red jacket reads the news, with the name strap Paige Duty, a caption and a ticker.">
+      <figcaption>The page. The set is drawn in raw WebGL and can be orbited. The bulletin on its screen is composited frame by frame while you watch.</figcaption>
+    </figure>
+  </header>
+
+  <section>
+    <div class="strap"><span class="no">01</span><h2>A photograph of nobody</h2></div>
+    <div class="with">With <i>Realistic Vision 5.1 (Stable Diffusion 1.5)</i> <i>SD VAE ft-MSE</i></div>
+    <div class="words"><p>Each presenter starts as a text prompt. A few candidates were generated at 768 × 432, about a minute each on the CPU. One was picked and refined to 1024 × 576. The studio, the office building and the bookshelves behind them are generated the same way.</p></div>
+    <div class="tiles five">
+      <figure><img src="img/cast_paige.jpg" width="520" height="292" alt="A woman with long dark hair in a red jacket, in a television studio."><figcaption>Paige Duty<small>anchor</small></figcaption></figure>
+      <figure><img src="img/cast_cy.jpg" width="520" height="292" alt="A man in a white shirt and green tie in front of monitors."><figcaption>Cy Dekar<small>anchor</small></figcaption></figure>
+      <figure><img src="img/cast_dee.jpg" width="520" height="292" alt="A man with curly ginger hair and a beard outside an office building."><figcaption>Dee Ploy<small>reporter, outdoors</small></figcaption></figure>
+      <figure><img src="img/cast_sunny.jpg" width="520" height="292" alt="A woman with a dark bob in a teal blouse, standing by a wall screen."><figcaption>Sunny Uptime<small>cloud forecast</small></figcaption></figure>
+      <figure><img src="img/cast_mel.jpg" width="520" height="292" alt="An older bald man with glasses in a grey suit, in a room with bookshelves."><figcaption>Y. A. Mel<small>guest, on a video call</small></figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">02</span><h2>Cut the person out</h2></div>
+    <div class="with">With <i>BiRefNet-portrait</i> <i>YuNet face detector</i></div>
+    <div class="words"><p>A matting network separates the presenter from the background, hair included. A small face detector finds the eyes and the mouth, which every later step uses as its ruler. The page keeps two layers: a cut-out it can move, and a plate with the person painted out, so that there is something behind the figure when it sways aside.</p></div>
+    <div class="tiles four">
+        <figure><img src="img/matte_photo.jpg" width="520" height="292" alt="The reporter's photograph."><figcaption>photograph</figcaption></figure>
+        <figure><img src="img/matte_alpha.jpg" width="520" height="292" alt="A white silhouette of the reporter on black."><figcaption>matte</figcaption></figure>
+        <figure><img src="img/matte_cut.jpg" width="520" height="292" alt="The reporter on a checkerboard."><figcaption>cut-out</figcaption></figure>
+        <figure><img src="img/matte_plate.jpg" width="520" height="292" alt="The office building with a soft blur where the reporter stood."><figcaption>plate</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">03</span><h2>Re-pose the face 65 times</h2></div>
+    <div class="with">With <i>LivePortrait</i></div>
+    <div class="words"><p>LivePortrait moves a face by shifting a few keypoints. Here it never makes video. It renders stills of the same face: a grid of mouths (jaw openings from shut to wide, each with the lips relaxed, spread, rounded or smiling), lips pressed together for m, b and p, lids half and fully closed, eyes left, right and down, the head turned and nodded, brows raised and lowered. Each pose takes about 6.5 seconds.</p><p>The photographs all smile with closed lips, and at first every presenter talked through that smile. The poses were rendered again around a relaxed mouth. The smile is kept for when someone is listening.</p></div>
+    <figure>
+      <img src="img/poses.jpg" width="1650" height="940" alt="Thirty-two small pictures of the same woman's face: head turned each way, brows up and down, eyes closed, eyes left and right, smiles, and many mouth shapes.">
+      <figcaption>Every kind of pose, as the page draws it. The page only ever blends neighbours in this set, so nothing is invented at run time.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">04</span><h2>Record a voice and time every sound</h2></div>
+    <div class="with">With <i>Phonon 31M</i> <i>Kokoro-82M</i> <i>Chatterbox</i> <i>wav2vec 2.0 phoneme recogniser</i> <i>Whisper base</i></div>
+    <div class="words"><p>A speech model reads each line three times. Whisper transcribes every take, so a take with a wrong word is never used. A phoneme recogniser is then aligned to the chosen take, which gives the start and length of every sound, and the pitch of the voice is traced. Three speech models were tried in turn; the page uses Phonon and the demo page can switch between all three.</p></div>
+    <figure>
+      <img src="img/chart.png" width="1650" height="895" alt="A chart with six lanes over one spoken line: jaw opening, lip shape, voice pitch, brows, head nod and breath, with the words and their phonemes along the bottom.">
+      <figcaption>One line of the bulletin. Words and phonemes run along the bottom. Jaw and lips follow the sounds; brows and nods follow the pitch and stress of the voice; the breath follows the phrases.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">05</span><h2>Ask a lip-sync network, then measure its answer</h2></div>
+    <div class="with">With <i>Wav2Lip</i> <i>2DFAN4 face landmarks</i></div>
+    <div class="split">
+      <div class="words"><p>Hand-written rules for which sound opens the mouth how far looked wrong twice. So Wav2Lip is given each recording and each face, and paints the mouth for every fiftieth of a second.</p><p>Its picture is small and soft, and it is never shown. A landmark network measures the gap between the lips and the width of the mouth in it. The same measurement on each presenter's own poses says which pose shows that opening on that face.</p></div>
+      <figure>
+        <img src="img/w2l.jpg" width="1284" height="301" alt="Six blurry pictures of a woman's face with different soft mouth shapes.">
+        <figcaption>What the lip-sync network paints. Only the measurements are used.</figcaption>
+      </figure>
+    </div>
+    <figure>
+      <img src="img/phon.jpg" width="1500" height="354" alt="Thirty close-ups of a mouth in sequence, each labelled with the sound being spoken and how far the jaw is open.">
+      <figcaption>What the page draws from those measurements, one frame every twentieth of a second, each labelled with the sound being made, the word, and the jaw opening.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">06</span><h2>Turn two pictures into motion</h2></div>
+    <div class="with">With <i>optical flow (OpenCV)</i></div>
+    <div class="split">
+      <div class="words"><p>Cross-fading between a head facing ahead and a head turned shows two faint heads at once. Optical flow between the two renders says where each point of the face goes instead.</p><p>Six such fields are stored on a coarse grid: turn right and left, nod down and up, brows up and down. The browser moves a mesh by a weighted sum of them, so the nose travels further than the ears, as it does on a real head.</p></div>
+      <div class="tiles two">
+        <figure><img src="img/flow_turn.jpg" width="640" height="614" alt="Arrows over a face, all pointing right, longest at the nose."><figcaption>a turn of six degrees</figcaption></figure>
+        <figure><img src="img/flow_nod.jpg" width="640" height="614" alt="Arrows over a face, pointing down, longest at the nose and chin."><figcaption>a nod of five degrees</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">07</span><h2>Find the body and the loose hair</h2></div>
+    <div class="with">With <i>BiSeNet face parser</i></div>
+    <div class="split">
+      <div class="words"><p>A face-parsing network labels hair, skin, neck and cloth. Three maps come from its labels: where the torso is, where hair hangs free, and where wind can reach it.</p><p>The torso breathes in through the gap before each phrase and out while the phrase is spoken. It shifts its weight and turns a little with the head. Free hair hangs on a spring behind the head, so it follows late and swings past. The reporter's curls catch gusts.</p></div>
+      <div class="tiles two">
+        <figure><img src="img/body_paige.jpg" width="760" height="428" alt="The anchor with her jacket tinted green and the lower part of her hair tinted red."><figcaption>green torso, red loose hair</figcaption></figure>
+        <figure><img src="img/body_dee.jpg" width="760" height="428" alt="The reporter with his jacket tinted green and his curls tinted purple."><figcaption>purple: hair the wind reaches</figcaption></figure>
+      </div>
+    </div>
+    <figure>
+      <img src="img/breath.jpg" width="1650" height="309" alt="Three pictures of the anchor: before a breath, after it, and both overlaid in red and cyan with coloured fringes at the shoulders and hair.">
+      <figcaption>One breath. Left, just before she breathes in; middle, the breath taken; right, the two laid over each other, the first in red and the second in cyan. The coloured fringes are what moved.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">08</span><h2>The browser does the rest</h2></div>
+    <div class="with">With <i>no model at all</i> <i>Canvas 2D</i> <i>raw WebGL</i> <i>Web Audio</i></div>
+    <div class="words"><p>The page holds 321 small images and sixteen MP3s. For every frame it blends the nearest mouth and eye poses onto the cut-out, moves the result with a small mesh, and draws it over the plate with a slow camera move, grain, captions and graphics. Each voice plays through a simulated room. There is no video file, no library and no network request, in about 1,400 lines of JavaScript, HTML and CSS.</p><p>The agent that built it cannot watch video, so movement was checked by measuring rendered frames. The chart shows that measurement for one presenter.</p></div>
+    <figure>
+      <img src="img/motion.png" width="1650" height="1350" alt="Six small charts over fifteen seconds: mouth opening, breath, shoulders up, chest sideways, and loose hair sideways and down.">
+      <figcaption>What moves while a line is spoken. Mouth and breath are what the engine asks for. Shoulders, chest and hair are measured on the rendered frames with optical flow, in pixels of a 1024-pixel-wide picture.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="strap"><span class="no">all</span><h2>What ran locally</h2></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Model</th><th>Its job here</th><th>Is its output in the page?</th></tr></thead>
+      <tbody>
+        <tr><td>Realistic Vision 5.1</td><td>The photographs of the five presenters and the six locations</td><td>Yes, as the stills</td></tr>
+        <tr><td>YuNet</td><td>Finds eyes and mouth</td><td>No</td></tr>
+        <tr><td>BiRefNet-portrait</td><td>Cuts each presenter out of the photograph</td><td>Yes, as the cut-out's edge</td></tr>
+        <tr><td>LivePortrait</td><td>Renders 65 poses of each face</td><td>Yes, as the mouth and eye poses</td></tr>
+        <tr><td>Phonon 31M</td><td>The voices in use</td><td>Yes, as sixteen MP3s</td></tr>
+        <tr><td>Kokoro-82M, Chatterbox</td><td>Two earlier sets of voices, kept for comparison</td><td>On the demo page</td></tr>
+        <tr><td>wav2vec 2.0 phonemes</td><td>Times every sound in a recording</td><td>As timing</td></tr>
+        <tr><td>Whisper base</td><td>Checks that each take says the right words</td><td>No</td></tr>
+        <tr><td>Wav2Lip</td><td>Says what the mouth should do for each recording</td><td>As two curves a line; never as pixels</td></tr>
+        <tr><td>2DFAN4</td><td>Measures lips, in Wav2Lip's picture and in the poses</td><td>No</td></tr>
+        <tr><td>BiSeNet face parser</td><td>Labels hair, neck and cloth for the body and hair maps</td><td>As three small maps a presenter</td></tr>
+      </tbody>
+    </table></div>
+    <ul class="notes">
+      <li><b>Nothing here is real.</b> The presenters, the places and the voices are synthetic, the news is satire, and nobody's likeness or voice was copied.</li>
+      <li><b>How it was built.</b> In one long session by an AI coding agent (Claude Code) working from eleven short requests. All models ran on four CPU cores with no GPU; making everything again takes about six hours and 11 GB of downloads.</li>
+      <li><b>Where it stops.</b> It is a warp of one photograph a person. Heads turn about six degrees at most, hands never appear, and hair moves as a sheet.</li>
+      <li><b>Licences differ.</b> Wav2Lip and the face parser's training data are for research and personal use. Check each model card before reusing anything.</li>
+    </ul>
+  </section>
+
+  <footer><span>DevOps Tonight</span><span>The live page: <a href="https://claude.ai/artifact/MVwkTuSzuiyrPJeqyG4HhD">claude.ai/artifact/MVwkTuSzuiyrPJeqyG4HhD</a></span><span>10 November 2026</span></footer>
+</main>
+</body>
+</html>

@@ -15,6 +15,8 @@ readings printed while the pipeline ran. Where no reading exists, no time is giv
 | 8 | "can we make it even better? with perfect audio and just better overall?" | Voices, lips timed to them, sound design, visual fixes | 10 Nov 01:26, `1794273969-4f1d`; demo `1794274002-c6fe` |
 | 9 | "can we make the sound and video/lips/movements feel more real even", then "but also lips movements needs to be better, and the eye browes everything" | Late lips found and fixed; 53 mouth poses; brows and head moved on a mesh by the voice; glances; a second set of voices; room sound | work in progress 03:04, `1794279858-8b49`; demo `1794279862-fcbf`. Final 07:33, `1794296027-3c43`; demo `1794296082-d6f9` |
 | 10 | "Need to fix sound on iOS, also ty lips and the old yaml man still feel off. And the audio model still leaves to be desired" | Sound on iPhone; lips from a lip-sync network, fitted to each face; the guest repaired; a third set of voices | iOS fix 08:30, `1794299421-bfdf`; demo `1794299531-abbb`. New voices 08:57, `1794301057-5e2b`; demo `1794301062-a842`. Final 09:47, `1794304073-cbbe`; demo `1794304077-933e` |
+| 11 | "And also body not needs to move a bit as well as hair and need to be as realistic as possible", "I meant needs to move", "His lips are too tight" | Torsos that breathe, shift and turn; hair on a spring; wind for the reporter; every mouth pose rebuilt around a relaxed mouth; new plates | 12:15, `1794312899-c19f`; demo `1794312903-98b9` |
+| 12 | "can you make a version with just the video and no sound, and then make a one pager i can share on reddit that shows the proccess of animating the people and what local models were used with images" | A silent copy of the video; a one-page explainer as a page and as pictures | one-pager 12:42, a new private artifact, `1794314566-d971` |
 
 The main page's artifact was private for versions 1 to 3. Its owner made it public some time before version 4 was
 published, so versions 4 and 5 went to a public page. The demo page is a separate, private artifact.
@@ -187,3 +189,32 @@ Described in full in [14](14-ios-sound-learned-lips-third-voices.md). In order:
    was still being measured.
 8. Mapped the reference onto each face, checked the result frame by frame and by measurement, recorded the set's output
    again, rendered both videos, and published the final pages.
+
+## 11. Body, hair and looser lips (10 November, published 12:15)
+
+Described in full in [15](15-body-hair-and-looser-lips.md). In order:
+
+1. 09:59: looked at the guest's mouth at four jaw settings and at the co-anchor and the reporter frame by frame.
+   All three talk through a closed-lip smile.
+2. Rendered a grid of settings for the guest, then for the other four: taking part of the smile out and letting the
+   lips a little forward loosens every mouth, and the guest's jaw can go half as far again.
+3. 10:14: downloaded a face-parsing network, checked its labels at two crop sizes, and started rendering the whole
+   pose set again around a relaxed mouth (65 poses a face, done 11:10).
+4. Built the body, hair and wind maps, extended the mesh, and wrote the breath, posture, hair-spring and wind code.
+   Recorded a presenter with the camera off and measured the frames: the picture did what was asked to a tenth of
+   a pixel.
+5. Fixed what the first measurements and charts showed: a pinned band holding the shoulders, shoulders bouncing on
+   stressed words, a body rocking with the phrases, a breath that was too quick.
+6. Measured the lip reference again on the new base frames, calibrated the new poses and raised the common opening.
+7. Found the halo the old plates left beside a moving figure; changed the plate; tried having the image model paint
+   the room behind each presenter and set that aside.
+8. In between, the requester wrote "claude/audio-and-polish push" (the branch was already pushed in full) and "can
+   you publish current state than continue?": both pages were published at 12:15 and the work was pushed at 12:20.
+9. Measured all five presenters on the final build, rendered both videos, and wrote this up.
+
+## 12. A silent video and a one-pager (10 November, one-pager published 12:42)
+
+Described in [16](16-silent-video-and-one-pager.md). The silent copy showed that the clock in the ticker had been
+running fast in every rendered video; the renderer was fixed and both videos were made again. The one-pager was
+built from pictures already in the repository plus four captures, published as a new private page, and exported
+as pictures because a link is not always what a forum wants.

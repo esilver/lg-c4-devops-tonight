@@ -14,3 +14,4 @@ tests/output/*.f32
 gen/venv4
 gen/venv5
 gen/venv6
+onepager/slices/

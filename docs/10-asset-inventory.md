@@ -206,3 +206,44 @@ The old pose renders and both old bundles stay in the repository because earlier
 | `tests/output/strip_taught_paige.jpg`, `strip_taught_mel.jpg` | evidence | Film strips with the learned lips: the first line, and the guest's answer |
 
 `gen/models/w2l/` (the lip-sync and landmark networks, 390 MB) is not committed.
+
+## Added in request 11
+
+| File | Status | What it is |
+|---|---|---|
+| `gen/work/<name>/lp4/*.png` (65 a presenter), `affine.json`, `dense.json`, `masks.png` | intermediate | The pose set built on a relaxed mouth: 512-pixel crops, where they sit in the frame, the settings they were rendered with, and the mouth, eye and brow masks |
+| `gen/work/<name>/lp/` | superseded | The earlier pose sets, kept because earlier documents refer to them |
+| `gen/work/<name>/frame_lp3.png` | intermediate | The base frame: the photograph with the relaxed mouth and eyes laid in |
+| `gen/work/<name>/body.json`, `body.jpg` | intermediate | The body, hair and wind maps on an 8-pixel grid with the torso's measurements; the maps drawn over the presenter |
+| `gen/work/<name>/plate3.jpg` | final | The plate behind the presenter, as bundled |
+| `gen/cast3.json`, `assets.json` | final | The picture bundle of this build (3.27 MB) |
+| `gen/cast2.json` | superseded | The bundle of requests 9 and 10 |
+| `gen/work/lipcal.json`, `gen/work/bundle*/lip_raw.json` | intermediate | Calibration and lip reference, measured again on the new poses and base frames |
+| `gen/work/lipcal_r10.json`, `gen/work/bundle*/lip_raw_r10.json` | superseded | The same as they were in request 10 |
+| `gen/out/relax_grid_<name>.jpg` | evidence | The first look: each face at several settings of smile and lip rounding, by jaw opening |
+| `gen/out/face_parse_two_crops.jpg`, `gen/out/bodymaps.jpg` | evidence | What the face parser labels at two crop sizes; the three maps over all five presenters |
+| `gen/out/plates_before.jpg`, `plate_halo_before_after.jpg` | evidence | The old plates; the halo they left beside a figure that has moved, and the first fix |
+| `gen/out/plates_tried/` | rejected | Three plates painted by the image model, and two comparisons |
+| `gen/logs/log_lpx4.txt`, `log_lipteach4_*.txt`, `log_plate.txt` | evidence | Logs of this pass |
+| `tests/output/poses_<name>_relaxed.jpg` | evidence | Twelve mouth poses of each presenter as the page now draws them |
+| `tests/output/poses_big_mel2.jpg`, `poses_big_mel3.jpg` | evidence | The guest at the same four jaw settings, before and after |
+| `tests/output/phon_cy.jpg`, `phon_dee.jpg` | evidence | Before: the co-anchor and the reporter talking through a smile, frame by frame |
+| `tests/output/phon_mel_relaxed.jpg` | evidence | After: the guest's mouth, frame by frame, labelled with the sound being made |
+| `tests/output/body_check.txt`, `body/measured_<name>.json`, `body/body_<name>.png` | evidence | The movement measurements, their series, and a chart for each presenter |
+| `tests/output/body/stills_*.jpg` | evidence | Breath out against breath in, and calm against a gust, as pairs of frames with a red and cyan overlay |
+| `demo/devops-tonight.mp4`, `demo/paige-lipsync.mp4` | final | Rendered again from this build |
+
+`gen/models/parse/` (the face parser, 94 MB) is not committed.
+
+## Added in request 12
+
+| File | Status | What it is |
+|---|---|---|
+| `demo/devops-tonight-silent.mp4` | final | The bulletin video with no sound track |
+| `onepager/page.html`, `onepager/img/` | final (source) | The one-page explainer and its twenty pictures |
+| `onepager/index.html` | final | The same page with its pictures inlined (2.0 MB), as published |
+| `onepager/devops-tonight-how-it-was-made.jpg`, `…-8000.jpg`, `…-part1.jpg` to `part3.jpg` | final | The page as one picture at full size, as one picture 8000 px tall, and as three |
+| `onepager/src/` | intermediate | Four captures: the television, the demo page's chart, a pose sheet, a labelled mouth strip |
+| `onepager/capture.js`, `make_images.py`, `build.py`, `export.js`, `stitch.py` | scripts | Gather the pictures, build the page, photograph it |
+
+`onepager/slices/` (the photographs the pictures are stitched from) is not kept.
