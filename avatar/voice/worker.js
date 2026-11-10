@@ -75,9 +75,14 @@ async function init(m) {
   if (!session.outputNames.includes('durations')) throw new Error('that model file does not report durations; the one needed is model_quantized.onnx from the Kokoro "timestamped" repository');
   const names = man ? man.voices : Object.keys(voices), v0 = names.includes(m.voice) ? m.voice : names[0];
   step('warming'); await voice(v0);
-  await run('ðɪs ɪz ə tˈɛst.', v0);                                        // the first run is slow (it sets things up); the second is the measure
+  const tw = performance.now(); await run('ðɪs ɪz ə tˈɛst.', v0); const cold = (performance.now() - tw) / 1000;      // the first run is slow (it sets things up); the second is the measure
   const t = performance.now(), r = await run('ænd ðɪs ɪz ɐnˈʌðəɹ wˈʌn, tə sˈi hW fˈæst ɪt ɡˈOz.', v0);
-  stage = 'ready'; post({ type: 'ready', rtf: (performance.now() - t) / 1000 / (r.wave.length / SR), threads, voices: names, from: from.runtime, model: bytes }, [bytes.buffer]);      // the runtime has its own copy now; the page may pass this one on
+  const made = (performance.now() - t) / 1000;
+  // two things worth knowing when the voice is slow: how fast this worker's core is at plain arithmetic, and whether a GPU is on offer
+  const tl = performance.now(); let acc = 0; for (let i = 0; i < 3e7; i++) acc += Math.sqrt(i) * 1.0000001; const loop = performance.now() - tl + (acc < 0 ? 1 : 0);
+  const gpu = navigator.gpu ? await navigator.gpu.requestAdapter().then(a => (a ? 'yes' : 'no adapter'), () => 'refused') : 'no';
+  stage = 'ready'; post({ type: 'ready', rtf: (performance.now() - t) / 1000 / (r.wave.length / SR), threads, voices: names, from: from.runtime, model: bytes,
+    about: { cold, made, secs: r.wave.length / SR, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, gpu, loop, bytes: bytes.length } }, [bytes.buffer]);      // the runtime has its own copy now; the page may pass this one on
 }
 async function voice(name) {
   if (!voices[name]) { if (!local) throw new Error('the voice ' + name + ' has not been added'); const r = await fetch(base + 'v_' + name + '.bin'); if (!r.ok) throw new Error('voice ' + name + ': HTTP ' + r.status); voices[name] = new Float32Array(await r.arrayBuffer()); }
@@ -145,9 +150,9 @@ function pitch(wave) {
 /* ── a line ── */
 async function say(m) {
   if (m.seq < least) return post({ type: 'skipped', id: m.id, seq: m.seq });
-  const t0 = performance.now(), { ph, word, toks } = await sounds(m.text);
+  const t0 = performance.now(), { ph, word, toks } = await sounds(m.text), t1 = performance.now();
   if (!ph) return post({ type: 'said', id: m.id, seq: m.seq, empty: true });
-  const { chars, wave, dur } = await run(ph, m.voice, m.speed), took = (performance.now() - t0) / 1000;
+  const { chars, wave, dur } = await run(ph, m.voice, m.speed), took = (performance.now() - t0) / 1000, g2p = (t1 - t0) / 1000;
   // ph and chars are the same characters unless one was unknown to the model; walk them together
   const wmap = []; { let j = 0; const all = Array.from(ph); for (let i = 0; i < all.length && j < chars.length; i++) if (all[i] === chars[j]) { wmap.push(word[i]); j++; } while (wmap.length < chars.length) wmap.push(-1); }
   let t = Math.max(0, dur[0] - EARLY); const seg = [], wt = new Array(toks.length).fill(null); let first = -1, last = 0;
@@ -173,6 +178,6 @@ async function say(m) {
   for (let i = wt.length - 1, nx = last; i >= 0; i--) { if (wt[i] == null) wt[i] = nx; nx = wt[i]; }                 // a word with no sound of its own starts with the next
   const chr = []; { let c = 0; for (const tk of toks) { chr.push(c); c += tk.length + 1; } }
   const r3 = v => Math.round(v * 1000) / 1000;
-  post({ type: 'said', id: m.id, seq: m.seq, audio, ph: chars.join(''), took, secs: n / SR,
+  post({ type: 'said', id: m.id, seq: m.seq, audio, ph: chars.join(''), took, g2p, secs: n / SR,
     sp: { words: toks.map((tk, i) => [tk, r3(Math.max(0, wt[i] - cut0))]), chars: chr, seg: seg.map(s => [s[0], r3(s[1] - cut0), r3(s[2]), Math.round(Math.min(2, s[3] / (mv || 1)) * 100) / 100]), len: r3(n / SR), f0 } }, [audio.buffer]);
 }

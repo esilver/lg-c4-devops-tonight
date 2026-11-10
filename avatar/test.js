@@ -7,6 +7,8 @@
 //  2 borrowed voice  the same page with no voice folder and stand-ins for Claude's reply and Claude's voice (which
 //                    "speaks" at 11 letters a second, slower than the page assumes, to exercise its clock)
 //  3 bare page       opened from disk with nothing: checks the last fallbacks
+// and, between 1 and 2, the page with its voice but no Claude: it should say back what is typed, in its own voice,
+// from the first message on.
 // Run from the repository root:  node avatar/test.js
 const { chromium } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path');
 const OUT = process.argv[2] || path.join(__dirname, '..', 'tests', 'output', 'voice'); fs.mkdirSync(OUT, { recursive: true });
@@ -32,7 +34,7 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
     r.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(r);
   }).listen(0); const origin = `http://127.0.0.1:${server.address().port}`;
   const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] }); let failed = 0;
-  for (const [name, url, withTts] of [['own voice', origin + '/index.html', false], ['borrowed voice', origin + '/novoice/index.html', true], ['bare page', 'file://' + __dirname + '/index.html', null]]) {
+  for (const [name, url, withTts] of [['own voice', origin + '/index.html', false], ['own voice, no Claude', origin + '/index.html', null], ['borrowed voice', origin + '/novoice/index.html', true], ['bare page', 'file://' + __dirname + '/index.html', null]]) {
     const p = await b.newPage({ viewport: { width: 900, height: 1100 } }); const errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && !/404|Failed to load resource|ERR_FILE_NOT_FOUND|Fetch API cannot load/.test(m.text()) && errs.push(m.text()));
     if (withTts !== null) await p.addInitScript(`(${mocks})(${JSON.stringify(REPLY)}, ${withTts})`);
     await p.goto(url);
@@ -40,7 +42,7 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
     const t0 = Date.now(); await p.waitForFunction(() => kk.state === 'ready' || kk.state === 'failed', null, { timeout: 240000 });
     const voice = await p.evaluate(() => ({ state: kk.state, error: kk.error, rtf: kk.rtf, how: document.getElementById('how').textContent, options: [...document.getElementById('voice').options].map(o => o.value) })); voice.load = (Date.now() - t0) / 1000;
     await p.waitForTimeout(400); let rows = [], shots = 0, firstSound = null, firsts = []; const began = Date.now();
-   for (const ask of name === 'own voice' ? ['Hi, who are you?', 'Say something with lots of lip sounds.'] : ['Hi, who are you?']) {
+   for (const ask of name === 'own voice' ? ['Hi, who are you?', 'Say something with lots of lip sounds.'] : name === 'own voice, no Claude' ? ['Peter Piper picked a peck of pickled peppers.'] : ['Hi, who are you?']) {
     await p.fill('#say', ask); const sent = Date.now(); let heard = null; await p.click('#send');
     for (let i = 0; i < 2400; i++) {
       const r = await p.evaluate(() => { const b = live.beat, bt = b ? PRE + planned() : 0, L = live.turn, l = L && live.cur >= 0 ? L[live.cur] : null; if (L) window.__lines = L;
