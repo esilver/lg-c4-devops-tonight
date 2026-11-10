@@ -162,3 +162,11 @@ Until the voices were added, there was nothing to take timing from, so it was es
 - The mouth targets, coarticulation and curves were the same as now.
 
 That bulletin ran 115.3 seconds. The code is in the repository's history at commit `abbc9b4`.
+
+## Superseded in request 9
+
+The curves described above were replaced. [13](13-more-real.md) describes what `buildSpeech` does now: three separate
+tracks (jaw, lip closure, lip shape) sampled 120 times a second, timing from a forced aligner for the second voices
+and corrected by 70 ms for the first, and brows, head and blinks driven by each line's phrases, stressed syllables and
+pitch. The target table is the same idea with different numbers: consonants now carry a jaw height and a weight, and
+p, b, m, f and v carry a closure. `speechAt` returns only the mouth; `faceAt` returns the whole face.

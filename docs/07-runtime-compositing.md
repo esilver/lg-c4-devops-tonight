@@ -115,3 +115,20 @@ plays each presenter's lines back to back. Time there is virtual, so half speed 
 - `drawActor` takes a smile weight, and stretches the cut-out by ±0.35 % about the bottom of the frame as breathing.
 - The page now carries [`src/sound.js`](../src/sound.js). Everything about sound is in [12](12-voices-and-sound.md).
 - The sprite count per presenter is 17 mouth poses and 3 eye poses. The built page is 3.5 MB.
+
+## Changed in request 9
+
+Drawing one presenter is now ([13](13-more-real.md) has the detail):
+
+1. `faceAt` works out the whole face for this moment: mouth, smile, blink, gaze, brows, head.
+2. `compose` copies the cut-out, then for the mouth region and the eye region blends the poses in a small canvas of
+   the region's size, cuts the mix to the region's shared mask and lays it on the cut-out.
+3. `warpGL.draw` uploads that picture to a second WebGL canvas and draws it on a mesh moved by six displacement fields
+   and a tilt. Without WebGL there, `warpFlat` does the old slide.
+4. The background plate, anything between (the over-the-shoulder box), then the warped presenter with the body's sway,
+   lean and breathing.
+
+Presenters are animated on the show's clock, not the wall clock, so a given moment of the bulletin always looks the
+same. A second set of recordings can be swapped in with `buildShow(set)`, which lays the bulletin out again.
+
+Cost in headless Chromium with software rendering: about 18 to 25 ms a frame for the bulletin's picture.

@@ -88,3 +88,19 @@ Results on the final build are tabulated in [12](12-voices-and-sound.md). The mo
 region median 2.83, maximum 5.60, against 2.79 for grain alone.
 
 Still not checked: nobody listened, and only Chromium was run.
+
+## Added in request 9
+
+| Script | What it does |
+|---|---|
+| `poses.js <presenter> <out.jpg> [name;name]` | A sheet of the face in every kind of pose, each forced directly; with names, only those, twice as large |
+| `lipsync.js <page> <out.json>` | Dumps every line's mouth-opening curve from any build, on the recording's clock |
+| `lipsync_check.py <json> <wav dir>` | Slides that curve against the loudness of the recording and reports the shift at which they agree best |
+| `demo_check.js` | The demo page at desktop and phone width: errors, sideways overflow, the voice switch, the close-up |
+
+`strip.js` now writes all of a line's tracks to `curves.json`, and `mux.py` fits the recording of the set's output to the
+timeline at both ends, because the recorder's clock and the page's differ by a few hundredths of a percent.
+
+Results on the final build are in [13](13-more-real.md), with the pose sheets in `tests/output/poses_*.jpg`.
+
+Still not checked: nobody watched or listened, and only Chromium was run.

@@ -145,3 +145,39 @@ The built pages of all five published versions are in the web artifact's own his
 | `tests/output/g_smile.jpg`, `g_broll2.jpg`, `refl.png`, `reg.jpg` | evidence | Smile moments, new B-roll in use, the reflection from above, desktop and phone layouts |
 
 `assets.json` now holds 116 images.
+
+## Added in request 9
+
+| File | Status | What it is |
+|---|---|---|
+| `assets.json` | final | Rebuilt by `gen/assets3.py` from `gen/cast2.json`: 321 images (6 stills; per presenter a plate, a cut-out, a mouth mask, 53 mouth poses, an eye mask, 6 eye poses) and six motion fields per presenter, 3.15 MB |
+| `gen/cast2.json` | intermediate | The presenter half of `assets.json`, written by `gen/lpexport2.py` |
+| `gen/cast_lp.json`, `gen/lpexport.py`, `gen/assets2.py` | superseded | The 17-pose bundle of requests 6 and 8 |
+| `src/speech.json` | final | The second voices: 16 MP3s with word and phoneme timing and pitch contours, 1.0 MB |
+| `src/speech_first.json` | final (demo page) | The first voices in the same form, phoneme times corrected by 70 ms |
+| `gen/work/<presenter>/lp/d_n01.png` … `d_n11.png`, `d_e1_0.png` … `d_w2_7.png` | final (as mouth poses) | The dense pose set: 11 + 4 × 8 renders |
+| `gen/work/<presenter>/lp/d_sg_0.png` … `d_sg_7.png`, `d_sh.png` | final | Smiling mouths at eight openings; a half smile. `d_sg_0` also supplies the smiling eyes |
+| `gen/work/<presenter>/lp/d_browup.png`, `d_browdn.png` | final (as motion fields) | Brows raised and lowered |
+| `gen/work/<presenter>/lp/f_yawp.png`, `f_yawn.png`, `f_pitp.png`, `f_pitn.png` | final (as motion fields) | Head turned 6° either way, nodded 5° either way |
+| `gen/work/<presenter>/lp/f_gl.png`, `f_gr.png`, `f_gd.png` | final (as eye poses) | Eyes left, right, down |
+| `gen/work/<presenter>/lp/dense.json` | intermediate | The jaw values of the dense set |
+| `gen/work/<presenter>/lp/masks2.png` | evidence | Mouth region in red, eye region in green, brow band in blue |
+| `gen/work/<presenter>/frame_lp2.png` | final (as plate and cut-out) | The frame with the neutral render inside the new regions |
+| `gen/work/<presenter>/lp/f_n1.png` … `f_n5.png`, `f_e*.png`, `f_w*.png`, `f_brow.png`, `f_smile.png`, `frame_lp.png` | superseded | The first pose set; `f_n`, `f_p`, `f_half`, `f_closed` are still used |
+| `gen/work/tts2/NN_<who>_t<k>.wav` | final (the chosen takes) and rejected | 35 takes by the second speech model |
+| `gen/work/tts2/rejected/01_cy_t*_dekkar.wav` | rejected | The two takes with the name read wrong |
+| `gen/work/tts2/script.json`, `takes.json`, `lines.json` | intermediate | The respelled text; every take's transcript and scores; the chosen takes with their timing |
+| `gen/work/tts/cb_test_paige.wav`, `cb_test_cy.wav` | evidence | The first test of the second speech model |
+| `gen/work/bundle/`, `gen/work/bundle_first/` | final (the MP3s) | Each line of each set trimmed and levelled, as WAV and MP3 |
+| `gen/work/voice_quality.json`, `gen/logs/log_voice_quality.txt` | evidence | The quality estimates for both sets |
+| `gen/out/flow_<presenter>.jpg` | evidence | Neutral face, the same moved by the measured field, and the real turned render |
+| `gen/out/lp2_paige.jpg`, `masks2_paige.jpg` | evidence | First look at the new brow and mouth renders; the regions over the face |
+| `gen/logs/log_tts2*.txt`, `log_lpx2.txt`, `log_lpx3*.txt`, `log_align*.txt`, `log_q8.txt`, `log_q9.txt` | evidence | Logs of this pass (progress bars removed) |
+| `demo/devops-tonight.mp4`, `demo/paige-lipsync.mp4` | evidence | Replaced with recordings of this build |
+| `tests/output/poses_<presenter>.jpg`, `poses_big*.jpg` | evidence | Every pose forced, per presenter; brow and gaze poses at double size (including the drooping eyes that were dropped, `poses_big_dee.jpg`) |
+| `tests/output/strip_new1.jpg`, `strip_look.jpg`, `strip_split_*.jpg`, `g_scenes_a.jpg`, `g_scenes_b.jpg` | evidence | Film strips of the first line, the glance on "Dee?", the two conversations; every scene |
+| `tests/output/demo_desktop.png`, `demo_phone.png`, `demo_closeup.png`, `demo_first_voices.png` | evidence | The demo page |
+| `tests/output/lipsync*.json`, `lipsync_report.txt` | evidence | Mouth curves of the three builds compared, and the result |
+| `tests/output/rec.webm`, `audio_analysis.txt`, `sound_check.json`, `asr_engine.txt` | evidence | Replaced: the set's output for this build, its analysis, and its transcript |
+
+The old pose renders and both old bundles stay in the repository because earlier documents refer to them.

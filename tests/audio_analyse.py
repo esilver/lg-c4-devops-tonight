@@ -5,14 +5,14 @@
 Use the speech environment:  ../../gen/venv3/bin/python ../audio_analyse.py"""
 import json, glob, numpy as np, soundfile as sf
 d = json.load(open('sound_check.json')); rec, sr = sf.read('rec.wav', dtype='float32'); assert sr == 24000
-beats = {ai: st for ai, st in d['beats'] if ai >= 0}; lead = d['lead']; lat = d['lat']
+beats = {ai: st + lead for ai, st, lead in d['beats'] if ai >= 0}; lat = d['lat']          # where each recording starts on the show's clock
 print(f"recording {len(rec) / sr:.1f} s, peak {np.abs(rec).max():.2f}")
 def db(x): return 20 * np.log10(max(1e-9, float(np.sqrt(np.mean(x ** 2)))))
 print(f"titles 0.3-4.8 s: {db(rec[int(0.3 * sr):int(4.8 * sr)]):.1f} dBFS rms")
 offs = []
 for ai in sorted(beats):
-    f = sorted(glob.glob(f'../../gen/work/tts/mp3/{ai:02d}_*.wav'))[0]; ref, _ = sf.read(f, dtype='float32')
-    exp = beats[ai] + lead - lat                       # the engine starts each recording early by the output latency
+    f = sorted(glob.glob(f'../../gen/work/bundle/{ai:02d}_*.wav'))[0]; ref, _ = sf.read(f, dtype='float32')
+    exp = beats[ai] - lat                       # the engine starts each recording early by the output latency
     a0 = int(max(0, exp - 1.0) * sr); a1 = int((exp + 1.0) * sr) + len(ref)
     if a1 > len(rec): continue
     seg = rec[a0:a1]; n = 1 << int(np.ceil(np.log2(len(seg) + len(ref))))

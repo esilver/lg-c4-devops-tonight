@@ -7,8 +7,9 @@
   If one resembles someone, that is coincidence.
 - **The places are synthetic** too: the studio, the data centre, the server aisle, the office and the satellite view.
 - **The news is invented.** "DevOps Tonight" is satire. The page says so under its controls and in its credits.
-- **The voices are synthetic.** They are stock voices of an open speech model. No real person's voice was recorded,
-  cloned or imitated.
+- **The voices are synthetic.** Two open speech models read the lines. The first uses its stock voices. The second
+  copies each presenter's voice from a recording made by the first, so no real person's voice was recorded, sampled or
+  imitated at any point.
 
 ## Licences were not checked during the session
 
@@ -19,7 +20,8 @@ use or particular kinds of use, and licence terms change.
 
 ## What was used
 
-All files came from the Hugging Face Hub. Nothing in `gen/models/` is committed.
+All files came from the Hugging Face Hub, except the quality estimators' weights and reference clip, which torchaudio
+fetches from PyTorch's download server. Nothing in `gen/models/` is committed.
 
 | Model | Hub repository | Used for | Licence as recalled (unverified) |
 |---|---|---|---|
@@ -32,6 +34,9 @@ All files came from the Hugging Face Hub. Nothing in `gen/models/` is committed.
 | Kokoro-82M | `hexgrad/Kokoro-82M`, through the `kokoro` 0.9.4 and `misaki` 0.9.4 packages | The spoken lines and their timing (request 8) | Apache 2.0 |
 | spaCy English model | `spacy/en_core_web_sm` 3.7.1 | Tokenising text for the speech model | MIT |
 | Whisper base (English) | `openai/whisper-base.en` | Checking the recordings by transcribing them. Not part of the result | MIT |
+| Chatterbox | `ResembleAI/chatterbox`, through the `chatterbox-tts` 0.1.7 package | The second set of voices (request 9). Its output carries its publisher's inaudible watermark | MIT |
+| wav2vec 2.0 phoneme recogniser | `facebook/wav2vec2-lv-60-espeak-cv-ft` | Timing the second voices by forced alignment. Not part of the result | Apache 2.0 |
+| SQUIM quality estimators | torchaudio 2.6.0 (`SQUIM_SUBJECTIVE`, `SQUIM_OBJECTIVE`), with torchaudio's sample recording of a real speaker as the reference | Estimating the quality of both voice sets. Not part of the result | BSD for torchaudio; the weights' and the sample's own terms were not looked at |
 
 ## Downloaded but not part of the result
 
@@ -57,6 +62,7 @@ its bundled Python wheel were deliberately not downloaded, and neither were its 
 | OpenCV (headless) | 5.0.0.93 |
 | Pillow | 13.0.0 |
 | Python for the speech model | 3.12, in `gen/venv3` (`gen/requirements-venv3.txt`) |
+| Python for the second speech model, the aligner and the estimators | 3.11.18 with PyTorch 2.6.0 (CPU), transformers 5.2.0, librosa 0.11.0, in `gen/venv4` (`gen/requirements-venv4.txt`) |
 | Node / Playwright | 22.23.4 / 1.63.0 |
 | ffmpeg | 6.1.1 |
 

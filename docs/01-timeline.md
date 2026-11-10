@@ -13,6 +13,7 @@ readings printed while the pipeline ran. Where no reading exists, no time is giv
 | 6 | "Lip movement is funny not natural" | Second lip-sync: re-posed faces driven by pronunciation | 22:39, `1794263977-2948` |
 | 7 | "Can I see demo after just that presenter so I can judge? Export all scripts and assets to a new repo, with Md files…" | The demo page, a recording, and this repository | demo at 22:47, `1794264437-c1e2` |
 | 8 | "can we make it even better? with perfect audio and just better overall?" | Voices, lips timed to them, sound design, visual fixes | 10 Nov 01:26, `1794273969-4f1d`; demo `1794274002-c6fe` |
+| 9 | "can we make the sound and video/lips/movements feel more real even", then "but also lips movements needs to be better, and the eye browes everything" | Late lips found and fixed; 53 mouth poses; brows and head moved on a mesh by the voice; glances; a second set of voices; room sound | work in progress 03:04, `1794279858-8b49`; demo `1794279862-fcbf`. Final 07:33, `1794296027-3c43`; demo `1794296082-d6f9` |
 
 The main page's artifact was private for versions 1 to 3. Its owner made it public some time before version 4 was
 published, so versions 4 and 5 went to a public page. The demo page is a separate, private artifact.
@@ -128,3 +129,37 @@ Described in full in [12](12-voices-and-sound.md). In order:
 7. One whole bulletin was played in a headless browser while its sound output was recorded, then analysed.
 8. Two videos with sound were rendered, both pages were published, and the work was pushed to the branch
    `claude/audio-and-polish`.
+
+## 9. A more real face and voice (10 November, published 03:04 and 07:33)
+
+Described in full in [13](13-more-real.md). In order:
+
+1. Tested whether a head turn can be reproduced by moving a picture: rendered each face turned and nodded a few degrees,
+   measured the optical flow, warped the neutral face by it and compared. It can (`gen/lp_motion.py`, `gen/lpflow.py`).
+2. Installed a second speech model in a fourth environment and confirmed it copies a voice from one of the first
+   recordings.
+3. 01:44: queued two takes of every line with that model, then a dense set of mouth poses and two brow poses for
+   every presenter, then a row of smiling mouths.
+4. Meanwhile wrote the forced aligner. Testing it on the first voices, whose timing is known, showed a constant
+   73 ms: the first voices' timing had been late all along. Confirmed from the sound onsets and from the speech
+   model's own code.
+5. Wrote the new export (opaque poses with one mask per region, displacement fields for head and brows) and the new
+   show code: three mouth tracks, a mesh for the head in a second WebGL canvas, and movement built from each line's
+   phrases, stressed syllables and pitch.
+6. 02:28: all takes scored. One line's name was read wrong; respelled it and recorded five more takes. Two takes with
+   slips lost to their clean alternates.
+7. 02:36: audio bundled with pitch contours. The first contours had tracker errors; filtered them.
+8. Wrote a lip-sync measurement and ran it on the old and new builds: 41 ms late before, slightly early now.
+9. Ran two speech-quality estimators over both sets of voices. They could not tell them apart, so the first voices
+   were re-timed and kept, and a switch was added to the demo page.
+10. 02:49: all poses rendered. Exported all five presenters, looked at every pose on a sheet per presenter, and dropped
+    the eye variants that drooped.
+11. Tuned against measurements: brows and blinks calmed, closing from a wide-open mouth slowed, blinks kept away from
+    cuts, nods strengthened slightly.
+12. Sound: the viewer's room, location sound, the video-call echo; then measured the outdoor bed, found it far too
+    loud, and brought it down.
+13. 03:04: published both pages as work in progress, at the requester's request ("can you publish the current state
+    artifact then continue").
+14. Transcribed the set's own output; that caught a take saying "pagers". Swapped the take, recorded the output again,
+    rendered both videos (done by 03:21) and wrote this account. The session was then idle for about four hours; the
+    final pages, unchanged since 03:25, were published at 07:33 and 07:34.
