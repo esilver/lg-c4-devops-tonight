@@ -1,8 +1,8 @@
 /* ───────────────────────── Sound ─────────────────────────
    Web Audio, no libraries. The voices are recordings: one MP3 per line, inlined next to its timing. Everything else is
    synthesised here: the title music, room tone, outdoor air, the video-call sound, static, clicks and the other channels.
-   The set is a point in space and the listener sits at the camera: backing away quietens it, moving off to the side
-   takes some level off, and going behind the panel muffles it. Nothing plays until the viewer turns sound on, because browsers require a click. */
+   The set is a point in space and the listener sits at the camera: backing away quietens it and brings up the sound of
+   the room, moving off to the side takes some level off, and going behind the panel muffles it. Nothing plays until the viewer turns sound on, because browsers require a click. */
 const CALIB = /*CALIB*/'';            // a tiny MP3 with a tone burst at a known time, used to measure the decoder's delay
 const snd = { ac: null, on: false, ready: false, vol: 0.7, bufs: [], sting: {}, lag: 0, cur: null, mus: null, osdAt: -9, sw: null, pw: null, hits: -1, tick: -1 };
 
@@ -18,6 +18,19 @@ function sndGain(ctx, v) { const n = ctx.createGain(); n.gain.value = v; return 
 function sndChain(nodes) { for (let i = 0; i < nodes.length - 1; i++) nodes[i].connect(nodes[i + 1]); return nodes[0]; }
 function sndTo(node, v, tc) { if (node._v === v) return; node._v = v; node.gain.setTargetAtTime(v, snd.ac.currentTime, tc || 0.12); }
 
+// A room as an impulse response: a few discrete early reflections (ms, gain) per ear, then a decaying, dulled noise tail whose
+// overall gain is `tail`. Built to exact levels (the browser's own normalising is off), so it sounds the same everywhere.
+function sndRoom(ac, sec, tail, tapsL, tapsR) {
+  const n = Math.floor(ac.sampleRate * sec), buf = ac.createBuffer(2, n, ac.sampleRate), i0 = Math.floor(ac.sampleRate * 0.024);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch); let lp = 0, e = 0;
+    for (let i = i0; i < n; i++) { lp += 0.32 * ((Math.random() * 2 - 1) - lp); d[i] = lp * Math.pow(1 - i / n, 2.6); e += d[i] * d[i]; }
+    const k = tail / Math.sqrt(e); for (let i = i0; i < n; i++) d[i] *= k;
+    for (const [ms, g] of ch ? tapsR : tapsL) d[Math.floor(ac.sampleRate * ms / 1000)] += g;
+  }
+  const cv = ac.createConvolver(); cv.normalize = false; cv.buffer = buf; return cv;
+}
+
 /* Build the graph. Must be called from a click or key press. */
 function sndCreate() {
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
@@ -26,17 +39,21 @@ function sndCreate() {
   snd.pan = ac.createPanner(); snd.pan.panningModel = 'equalpower'; snd.pan.distanceModel = 'inverse'; snd.pan.refDistance = 2.55; snd.pan.rolloffFactor = 0.9;
   snd.pan.coneInnerAngle = 140; snd.pan.coneOuterAngle = 320; snd.pan.coneOuterGain = 0.4;       // the speakers face the room
   sndChain([snd.master, snd.occl, snd.pan, ac.destination]);
+  // The viewer's room. Besides the direct sound, the set is heard off the walls: a few early reflections and a short,
+  // dull tail, different in each ear. It does not pass through the cone above, and it grows as the listener backs away.
+  const room = sndRoom(ac, 0.42, 0.45, [[6, 0.35], [13, 0.28], [19, -0.22], [28, 0.18]], [[8, 0.33], [15, -0.27], [22, 0.22], [31, 0.17]]);
+  snd.roomSend = G(0); sndChain([snd.occl, snd.roomSend, room, ac.destination]);
   snd.voice = G(1); snd.bed = G(1); snd.music = G(0.8); snd.ui = G(1);
   for (const n of [snd.voice, snd.bed, snd.music, snd.ui]) n.connect(snd.master);
-  // a little studio room on the anchors' microphones: 0.35 s of decaying noise as an impulse response
-  const ir = ac.createBuffer(2, Math.floor(ac.sampleRate * 0.35), ac.sampleRate);
-  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.2); }
-  const rev = ac.createConvolver(); rev.buffer = ir; sndChain([rev, G(0.1), snd.voice]);
+  // a little of the studio around the anchors' microphones: a treated room, so only a trace
+  const rev = sndRoom(ac, 0.3, 0.3, [[11, 0.2], [17, 0.15]], [[9, 0.2], [21, -0.15]]); sndChain([rev, G(0.16), snd.voice]);
   // one microphone chain per kind of voice
-  const studio = G(1); sndChain([studio, sndFilter(ac, 'highpass', 70, 0.7), snd.voice]); sndChain([studio, G(0.5), rev]);
-  const field = G(1); sndChain([field, sndFilter(ac, 'highpass', 170, 0.7), sndFilter(ac, 'peaking', 2600, 0.9, 3), sndFilter(ac, 'lowpass', 7500, 0.7), snd.voice]);
+  const studio = G(1); sndChain([studio, sndFilter(ac, 'highpass', 70, 0.7), snd.voice]); studio.connect(rev);
+  const field = G(1), fmic = sndFilter(ac, 'highpass', 170, 0.7); sndChain([field, fmic, sndFilter(ac, 'peaking', 2600, 0.9, 3), sndFilter(ac, 'lowpass', 7500, 0.7), snd.voice]);
+  const slap = ac.createDelay(0.2); slap.delayTime.value = 0.058; sndChain([field, slap, sndFilter(ac, 'lowpass', 2400, 0.5), G(0.09), fmic]);          // the reporter's voice comes back faintly off the building
   const shaper = ac.createWaveShaper(), curve = new Float32Array(257); for (let i = 0; i < 257; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(2.2 * x) / Math.tanh(2.2); } shaper.curve = curve;
-  const call = G(1); sndChain([call, sndFilter(ac, 'highpass', 280, 0.7), sndFilter(ac, 'lowpass', 3600, 0.7), sndFilter(ac, 'peaking', 900, 1.2, 4), shaper, G(0.7), snd.voice]);
+  const call = G(1), cmic = sndFilter(ac, 'highpass', 280, 0.7); sndChain([call, cmic, sndFilter(ac, 'lowpass', 3600, 0.7), sndFilter(ac, 'peaking', 900, 1.2, 4), shaper, G(0.7), snd.voice]);
+  const box = ac.createDelay(0.2), fb = G(0.3); box.delayTime.value = 0.027; sndChain([call, box, sndFilter(ac, 'lowpass', 3000, 0.5), G(0.3), cmic]); sndChain([box, fb, box]);      // a small bare room around a laptop microphone
   snd.chain = { studio, field, call };
   // looping beds, silent until a scene asks for them
   const white = sndNoise(ac, 2, false), brown = sndNoise(ac, 4, true); snd.white = white;
@@ -46,6 +63,9 @@ function sndCreate() {
   snd.room = bed(); sndChain([loop(brown), sndFilter(ac, 'lowpass', 500, 0.5), G(0.03), snd.room]);
   snd.air = bed(); const gust = G(1); gust.connect(snd.air); sndChain([osc('sine', 0.11), G(0.35), gust.gain]);       // slow gusts
   sndChain([loop(brown), sndFilter(ac, 'lowpass', 1100, 0.5), G(0.22), gust]); sndChain([loop(white), sndFilter(ac, 'bandpass', 2600, 0.4), G(0.012), gust]);
+  sndChain([loop(brown), sndFilter(ac, 'bandpass', 118, 2.2), G(0.1), snd.air]); sndChain([osc('triangle', 97.5), G(0.003), snd.air]); sndChain([osc('triangle', 146.2), G(0.0015), snd.air]);       // cooling plant on the roof
+  const pass = G(0.05); pass.connect(snd.air); sndChain([osc('sine', 0.045), G(0.04), pass.gain]); sndChain([loop(brown), sndFilter(ac, 'bandpass', 420, 0.6), pass]);                // traffic, far off, coming and going
+  snd.line = bed(); sndChain([loop(white), sndFilter(ac, 'bandpass', 1500, 0.5), G(0.006), snd.line]);                                                  // the open line of a video call
   snd.hum = bed(); sndChain([loop(brown), sndFilter(ac, 'lowpass', 260, 0.5), G(0.3), snd.hum]); sndChain([osc('sine', 100), G(0.02), snd.hum]); sndChain([loop(white), sndFilter(ac, 'bandpass', 5200, 0.6), G(0.006), snd.hum]);
   snd.pad = bed(); const pf = sndFilter(ac, 'lowpass', 700, 0.7); sndChain([pf, G(0.09), snd.pad]); for (const f of [110, 164.81, 220.4]) osc('triangle', f).connect(pf);
   snd.tone = bed(); sndChain([osc('sine', 1000), G(0.03), snd.tone]);
@@ -54,8 +74,9 @@ function sndCreate() {
 }
 
 /* Decode the lines, measure the decoder's delay, and render the two pieces of music. */
-function sndLoad() {
-  const jobs = SPEECH.map((L, i) => sndDecode(L.audio).then(b => { snd.bufs[i] = b; }));
+function sndLoad(set) {
+  snd.ready = false; snd.bufs = [];
+  const jobs = (set || SPEECH).map((L, i) => sndDecode(L.audio).then(b => { snd.bufs[i] = b; }));
   if (CALIB) jobs.push(sndDecode(CALIB).then(b => {                 // the burst was encoded at 0.100 s; wherever it turns up, the difference is delay
     const d = b.getChannelData(0); let i = 0; while (i < d.length && Math.abs(d[i]) < 0.2) i++; snd.lag = clamp(i / b.sampleRate - 0.1, -0.02, 0.12);
   }));
@@ -155,14 +176,16 @@ function soundFrame(frameT, eye) {
   if (snd.sw !== switchedAt) { if (snd.sw !== null && powered && switchedAt <= t + 0.01) sndStatic(); snd.sw = switchedAt; }
   const live = powered && t - switchedAt >= 0.32, at = live && channel === 0 ? showAt(t) : null, b = at && at.b;
   // channel 1: the bulletin
-  let air = 0, room = 0, hum = 0;
+  let air = 0, room = 0, hum = 0, line = 0;
   if (b && snd.ready) {
-    if (b.sp) { sndPlay('cur', b.ai, snd.bufs[b.ai], snd.chain[sndVoiceKind(b)], at.bt - LEAD + sndLatency()); sndStop('mus'); }
+    if (b.sp) { sndPlay('cur', b.ai, snd.bufs[b.ai], snd.chain[sndVoiceKind(b)], at.bt - b.lead + sndLatency()); sndStop('mus'); }
     else { sndStop('cur'); const k = b.intro ? 'intro' : 'outro'; sndPlay('mus', k, snd.sting[k], snd.music, at.bt + sndLatency()); }
     const dee = b.who === 'dee' || (b.split && b.split.includes('dee')), cut = b.sp ? cutAt(b, at.bt) : null;
-    air = dee ? (b.split ? (b.who === 'dee' ? 0.55 : 0.3) : 0.7) : 0; hum = cut && cut[2] === 'servers' ? 0.8 : 0; room = b.sp && !dee ? 1 : 0;
+    air = dee ? (b.split ? (b.who === 'dee' ? 0.4 : 0.22) : 0.5) : 0; hum = cut && cut[2] === 'servers' ? 0.8 : 0; room = b.sp && !dee ? 1 : 0;
+    line = b.split && b.split.includes('mel') ? (b.who === 'mel' && at.bt > b.t0 - 0.25 && at.bt < b.t1 + 0.3 ? 1 : 0.25) : 0;       // the caller's side opens up when he speaks
   } else { sndStop('cur'); sndStop('mus'); }
-  sndTo(snd.air, air, 0.15); sndTo(snd.room, room, 0.3); sndTo(snd.hum, hum, 0.2);
+  sndTo(snd.air, air, 0.15); sndTo(snd.room, room, 0.3); sndTo(snd.hum, hum, 0.2); sndTo(snd.line, line, 0.06);
+  sndTo(snd.roomSend, clamp(0.12 + 0.07 * (dist - 1.1), 0.12, 0.5), 0.2);            // about 16 dB under the direct sound from the usual seat, 9 dB from the back of the room
   // the other channels
   sndTo(snd.pad, live && channel === 1 ? 1 : 0, 0.3); sndTo(snd.log, live && channel === 3 ? 1 : 0, 0.3); sndTo(snd.tone, live && channel === 4 ? 1 : 0, 0.05);
   if (live && channel === 2) { if (snd.hits >= 0 && dvd.hits !== snd.hits) { if (dvd.corners !== snd.corners) { sndBlip(740); sndBlip(932, 0.09); sndBlip(1109, 0.18); } else sndBlip(620 + (dvd.hits % 5) * 70); } snd.hits = dvd.hits; snd.corners = dvd.corners; } else snd.hits = -1;

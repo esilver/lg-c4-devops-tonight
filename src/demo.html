@@ -12,7 +12,8 @@
   :root {
     color-scheme: dark;
     --bg: #171b21; --panel: #20262e; --line: #343d49; --ink: #ece9e2; --muted: #9aa4b0;
-    --accent: #f2b23e; --lips: #6db9f5;
+    --accent: #f2b23e;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;      /* chart series: jaw, lips, face. Checked for colour-blind separation and contrast on --panel */
     --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --data: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   }
@@ -41,9 +42,11 @@
   .seg button[aria-pressed=true] { position: relative; z-index: 1; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
   h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-  #chart { width: 100%; height: 210px; cursor: crosshair; }
+  #chart { width: 100%; height: 318px; cursor: crosshair; touch-action: none; }
+  .readout { font: 500 12.5px var(--data); font-variant-numeric: tabular-nums; color: var(--muted); min-height: 1.5em; }
+  .readout b { color: var(--ink); font-weight: 500; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
-  .legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+  .legend i { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 6px; border-radius: 2px; }
   .people { display: grid; gap: 6px; }
   .people button { text-align: left; display: grid; gap: 0; }
   .people small, .linesList small { color: var(--muted); font-size: 12px; }
@@ -62,7 +65,7 @@
 <main>
   <header>
     <h1>Presenter Lip-Sync Demo</h1>
-    <p>One presenter from DevOps Tonight at a time, full frame, so the mouth movement can be judged against the voice. Turn sound on, slow it down, step a frame at a time, or switch to the mouth close-up.</p>
+    <p>One presenter from DevOps Tonight at a time, full frame, so the lips, brows, eyes and head can be judged against the voice. Turn sound on, slow it down, step a frame at a time, or switch to the close-up.</p>
   </header>
   <div class="stage">
     <div class="col">
@@ -77,23 +80,29 @@
         <span class="seg" role="group" aria-label="Playback speed">
           <button type="button" data-speed="1" aria-pressed="true">1×</button><button type="button" data-speed="0.5" aria-pressed="false">½×</button><button type="button" data-speed="0.25" aria-pressed="false">¼×</button>
         </span>
+        <span class="seg" role="group" aria-label="Voices" id="voices">
+          <button type="button" data-voices="new" aria-pressed="true">New voices</button><button type="button" data-voices="first" aria-pressed="false">First voices</button>
+        </span>
       </div>
       <div class="card">
-        <h2>Mouth curves for this line</h2>
-        <canvas id="chart" aria-label="Jaw opening and lip shape over the current line"></canvas>
+        <h2>What drives the face in this line</h2>
+        <canvas id="chart" aria-label="Jaw opening, lip shape, voice pitch, brows and head nod over the current line"></canvas>
+        <div class="readout" id="readout" aria-live="off"></div>
         <div class="legend">
-          <span><i style="background: var(--accent)"></i>Jaw opening, from closed to wide; dips below the line are lips pressed for m, b and p</span>
-          <span><i style="background: var(--lips)"></i>Lip shape, spread above the line and rounded below</span>
+          <span><i style="background: var(--s1)"></i>Jaw opening, closed to wide; dips below the line are lips pressed for m, b and p</span>
+          <span><i style="background: var(--s2)"></i>Lip shape, spread above the line and rounded below</span>
+          <span><i style="background: var(--muted)"></i>Pitch of the recorded voice, about the speaker's usual pitch</span>
+          <span><i style="background: var(--s3)"></i>Brows (raised above the line, lowered below) and head (a dip is a nod), both following the voice</span>
         </div>
       </div>
-      <p class="note">Keys: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> step one frame, <kbd>1</kbd>–<kbd>5</kbd> choose a presenter. Click the curves to jump within the line. Sound starts off because browsers need a click first. At half and quarter speed the voice slows and drops in pitch. The voices are synthetic, the presenters are AI-generated stills, and none is a real person.</p>
+      <p class="note">Keys: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> step one frame, <kbd>1</kbd>–<kbd>5</kbd> choose a presenter. Click the curves to jump within the line. Sound starts off because browsers need a click first. <b>New voices / First voices</b> plays the same lines in either set of recordings, each with the lips timed to it. At half and quarter speed the voice slows and drops in pitch. The voices are synthetic, the presenters are AI-generated stills, and none is a real person.</p>
     </div>
     <div class="col">
       <div class="card"><h2>Presenter</h2><div class="people" id="people"></div></div>
       <div class="card"><h2>Lines</h2><div class="linesList" id="lines"></div></div>
       <div class="card"><h2>View</h2>
         <div class="opts">
-          <label for="o-closeup"><input type="checkbox" id="o-closeup">Mouth close-up</label>
+          <label for="o-closeup"><input type="checkbox" id="o-closeup">Face close-up</label>
           <label for="o-head"><input type="checkbox" id="o-head" checked>Head movement</label>
           <label for="o-camera"><input type="checkbox" id="o-camera" checked>Camera push-in</label>
           <label for="o-captions"><input type="checkbox" id="o-captions" checked>Captions</label>
@@ -112,6 +121,7 @@ const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', MONO = 
 let switchedAt = -10;
 /*NEWS*/
 /*SOUND*/
+const SPEECH_FIRST = /*SPEECH_FIRST*/null;         // the first voices, for comparison: same lines, same faces, timed to those recordings
 /* ───────────────────────── Demo ───────────────────────── */
 const ORDER = ['paige', 'cy', 'dee', 'sunny', 'mel'], GAP = 0.45, FPS = 30;
 const st = { who: 'paige', vt: 0, playing: !matchMedia('(prefers-reduced-motion: reduce)').matches, speed: 1, closeup: false, head: true, camera: true, captions: true, grain: true };
@@ -139,31 +149,18 @@ for (const [n, id] of ORDER.entries()) {
   el.append((n + 1) + '  ' + name, role); el.onclick = () => choose(id); $('people').append(el);
 }
 
-// The show's presenter drawing, with switches for head movement and parallax so the mouth can be judged alone.
-function drawPresenter(id, t, sp, move, zf) {
-  const a = ACT[id], f = a.m.face, s = a.m.seed, e = !move ? 0 : sp.on ? 1 : 0.3;
-  compose(a, t, sp, smileAt(where(st.vt)[0], where(st.vt)[1], id));
-  warp(a, e * (1.5 * Math.sin(t * 2.3 + s) + 0.9 * Math.sin(t * 4.1 + s * 2)),
-          e * (1.1 * Math.sin(t * 2.7 + s * 1.3) + 0.6 * Math.sin(t * 4.9 + s)) + (move ? sp.nod * 2.3 : 0),
-          e * 0.011 * Math.sin(t * 1.7 + s * 0.7));
-  c.drawImage(a.bg, 0, 0);
-  c.save();
-  if (move) { c.translate(f.cx, FH + 260); c.rotate((0.0032 * Math.sin(t * 0.53 + s) + 0.0018 * Math.sin(t * 1.31 + s * 2)) * (0.6 + 0.4 * e)); c.translate(-f.cx, -(FH + 260)); }
-  c.translate(f.cx, f.cy); c.scale(zf, zf); c.translate(-f.cx, -f.cy);
-  if (move) { c.translate(0, FH); c.scale(1, 1 + 0.0035 * Math.sin(t * 1.5 + s * 1.9)); c.translate(0, -FH); }
-  c.drawImage(a.wf, 0, 0);
-  c.restore();
-}
 function render() {
-  const [b, bt] = where(st.vt), t = st.vt, f = ACT[b.who].m.face, sp = speechAt(b, bt, b.who), p = clamp(bt / b.dur, 0, 1);
+  const [b, bt] = where(st.vt), t = st.vt, f = ACT[b.who].m.face, p = clamp(bt / b.dur, 0, 1);
   c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000'; c.fillRect(0, 0, SW, SH);
   c.save();
-  if (st.closeup) { c.translate(SW / 2, SH / 2); c.scale(2.3, 2.3); c.translate(-f.cx, -(f.cy + 0.62 * f.iod)); }
+  if (st.closeup) {                    // brows to chin, without running off the edge of the picture
+    const z = Math.min(2.3, 150 / f.iod), hw = SW / 2 / z, hh = SH / 2 / z; c.translate(SW / 2, SH / 2); c.scale(z, z); c.translate(-clamp(f.cx, hw, FW - hw), -clamp(f.cy + 0.1 * f.iod, hh, FH - hh));
+  }
   else if (st.camera) {
     const z = 1.035 + 0.05 * ease(p), sh = b.live ? 1 : 0.12;
     c.translate(SW / 2 + wob(t, 3) * 3.4 * sh, SH / 2 + wob(t, 9) * 2.6 * sh); c.rotate(wob(t * 0.8, 5) * 0.0035 * sh); c.scale(z, z); c.translate(-SW / 2, -SH / 2);
   }
-  drawPresenter(b.who, t, sp, st.head, st.camera && !st.closeup ? 1.012 + 0.022 * ease(p) : 1);
+  drawActor(b.who, b.start + bt, { b, bt, zb: 1, zf: st.camera && !st.closeup ? 1.012 + 0.022 * ease(p) : 1, still: !st.head });      // the show's own presenter drawing
   c.restore();
   if (st.grain) {
     c.save(); c.globalCompositeOperation = 'overlay'; c.globalAlpha = 0.11;
@@ -182,52 +179,57 @@ function render() {
   }
 }
 
-/* ── chart: the two curves that drive the mouth, with the words and phonemes of the line ── */
+/* ── chart: five small lanes on one time axis. The jaw and lips come from the timing of each sound; brows and head
+   follow the pitch and stress of the recorded voice. One lane per measure, because they have different scales. ── */
 const chart = $('chart'), g = chart.getContext('2d'), css = getComputedStyle(document.documentElement), col = n => css.getPropertyValue(n).trim();
-const PADL = 62, PADR = 12;
+const PADL = 78, PADR = 12, LANES = [                                     // [name, colour, top, bottom, value at top, value at bottom, tick labels]
+  ['jaw', '--s1', 12, 84, 1, -0.14, [[1, 'wide'], [0, 'closed']]], ['lips', '--s2', 100, 144, 1, -1, [[1, 'spread'], [0, 'neutral'], [-1, 'round']]],
+  ['pitch', '--muted', 160, 196, 8, -8, [[0, 'pitch']]], ['brows', '--s3', 206, 238, 1, -0.45, [[0, 'brows']]], ['nod', '--s3', 244, 274, 0.45, -0.6, [[0, 'head']]]];
+let curves = null, hoverT = null;
+function measure(b, t) { const q = faceAt(b.who, b, t, b.start + t, false); return [q.o, q.s, q.on ? pitchAt(b, t) : 0, q.bu - q.bd, -q.pit]; }
 function drawChart() {
   const [b, bt] = where(st.vt), dpr = Math.min(2, devicePixelRatio || 1), W = chart.clientWidth, H = chart.clientHeight;
   if (chart.width !== Math.round(W * dpr) || chart.height !== Math.round(H * dpr)) { chart.width = Math.round(W * dpr); chart.height = Math.round(H * dpr); }
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-  const X = t => PADL + t / b.dur * (W - PADL - PADR), J0 = 92, J1 = 14, S0 = 136, SA = 24;        // jaw baseline / top, lip midline / amplitude
+  const X = t => PADL + t / b.dur * (W - PADL - PADR), N = Math.max(60, Math.floor(W - PADL - PADR)), Y = (L, v) => L[2] + (L[4] - clamp(v, Math.min(L[4], L[5]), Math.max(L[4], L[5]))) / (L[4] - L[5]) * (L[3] - L[2]);
+  if (!curves || curves.key !== b.ai + ':' + N) { curves = { key: b.ai + ':' + N, v: [] }; for (let i = 0; i <= N; i++) curves.v.push(measure(b, i / N * b.dur)); }
   g.font = `11px ${MONO}`; g.textBaseline = 'middle'; g.lineWidth = 1;
-  // axes: every label names a value the curves can reach
-  g.strokeStyle = col('--line'); g.fillStyle = col('--muted'); g.textAlign = 'right';
-  for (const [y, lab] of [[J1, 'wide 1'], [J0, 'closed 0'], [S0 - SA, 'spread'], [S0, 'neutral'], [S0 + SA, 'round']]) { g.beginPath(); g.moveTo(PADL, y); g.lineTo(W - PADR, y); g.stroke(); g.fillText(lab, PADL - 8, y); }
+  // axes: hairlines, each labelled with what that level means
+  g.textAlign = 'right';
+  for (const L of LANES) for (const [v, lab] of L[6]) { const y = Math.round(Y(L, v)) + 0.5; g.strokeStyle = col('--line'); g.beginPath(); g.moveTo(PADL, y); g.lineTo(W - PADR, y); g.stroke(); g.fillStyle = col('--muted'); g.fillText(lab, PADL - 8, y); }
   // words and their phonemes
   g.textAlign = 'left'; const end = [-1e9, -1e9];                 // right edge of the last label on each of the two label rows
   b.wt.forEach((t, k) => {
-    const x = X(t), word = b.words[k]; g.strokeStyle = col('--line'); g.beginPath(); g.moveTo(x, 6); g.lineTo(x, H - 34); g.stroke();
+    const x = Math.round(X(t)) + 0.5, word = b.words[k]; g.strokeStyle = col('--line'); g.beginPath(); g.moveTo(x, 6); g.lineTo(x, H - 34); g.stroke();
     g.font = `12px ${SANS}`; const w = g.measureText(word).width, row = x + 3 > end[0] + 5 ? 0 : x + 3 > end[1] + 5 ? 1 : -1;
     if (row < 0) return;
     g.fillStyle = col('--ink'); g.fillText(word, x + 3, row ? H - 9 : H - 24); end[row] = x + 3 + w;
     if (row === 0) {                                              // phonemes sit under the word when the next word leaves room
       const t1 = k + 1 < b.wt.length ? b.wt[k + 1] : 1e9, next = k + 1 < b.wt.length ? X(b.wt[k + 1]) : W - PADR; g.font = `10px ${MONO}`;
-      const ph = b.sp.seg.filter(q => q[1] + LEAD >= t - 0.001 && q[1] + LEAD < t1 - 0.001 && !' ,.:;?!'.includes(q[0])).map(q => q[0]).join('');
+      const ph = b.sp.seg.filter(q => q[1] + b.lead >= t - 0.001 && q[1] + b.lead < t1 - 0.001 && q[2] > 0 && !' ,.:;?!'.includes(q[0])).map(q => q[0]).join('');
       if (g.measureText(ph).width < next - x - 6 && x + 3 > end[1] + 5) { g.fillStyle = col('--muted'); g.fillText(ph, x + 3, H - 9); end[1] = x + 3 + g.measureText(ph).width; }
     }
   });
-  // curves
-  const N = Math.max(60, Math.floor(W - PADL - PADR)), jo = [], ls = [];
-  for (let i = 0; i <= N; i++) { const q = speechAt(b, i / N * b.dur, b.who); jo.push(q.o); ls.push(q.s); }
-  const px = i => PADL + i / N * (W - PADL - PADR);
-  g.beginPath(); g.moveTo(px(0), J0); for (let i = 0; i <= N; i++) g.lineTo(px(i), J0 - jo[i] * (J0 - J1)); g.lineTo(px(N), J0); g.closePath();
-  g.globalAlpha = 0.16; g.fillStyle = col('--accent'); g.fill(); g.globalAlpha = 1;
-  g.lineWidth = 2; g.lineJoin = 'round';
-  g.strokeStyle = col('--accent'); g.beginPath(); for (let i = 0; i <= N; i++) g[i ? 'lineTo' : 'moveTo'](px(i), J0 - jo[i] * (J0 - J1)); g.stroke();
-  g.strokeStyle = col('--lips'); g.beginPath(); for (let i = 0; i <= N; i++) g[i ? 'lineTo' : 'moveTo'](px(i), S0 - ls[i] * SA); g.stroke();
-  // playhead with the current values marked
-  const xp = X(clamp(bt, 0, b.dur)), now = speechAt(b, bt, b.who);
+  // curves: 2 px lines; the jaw also gets a light wash down to its baseline
+  const px = i => PADL + i / N * (W - PADL - PADR); g.lineWidth = 2; g.lineJoin = g.lineCap = 'round';
+  LANES.forEach((L, k) => {
+    if (k === 0) { g.beginPath(); g.moveTo(px(0), Y(L, 0)); for (let i = 0; i <= N; i++) g.lineTo(px(i), Y(L, curves.v[i][0])); g.lineTo(px(N), Y(L, 0)); g.closePath(); g.globalAlpha = 0.1; g.fillStyle = col(L[1]); g.fill(); g.globalAlpha = 1; }
+    g.strokeStyle = col(L[1]); g.beginPath(); for (let i = 0; i <= N; i++) g[i ? 'lineTo' : 'moveTo'](px(i), Y(L, curves.v[i][k])); g.stroke();
+  });
+  // playhead with the current values marked; while the pointer is over the chart, a second hairline reads out that moment
+  const tp = clamp(bt, 0, b.dur), xp = X(tp), now = measure(b, tp);
+  if (hoverT != null) { const xh = Math.round(X(hoverT)) + 0.5; g.lineWidth = 1; g.strokeStyle = col('--muted'); g.beginPath(); g.moveTo(xh, 4); g.lineTo(xh, H - 34); g.stroke(); }
   g.lineWidth = 1.5; g.strokeStyle = col('--ink'); g.beginPath(); g.moveTo(xp, 4); g.lineTo(xp, H - 34); g.stroke();
-  g.fillStyle = col('--accent'); g.beginPath(); g.arc(xp, J0 - now.o * (J0 - J1), 4, 0, 7); g.fill();
-  g.fillStyle = col('--lips'); g.beginPath(); g.arc(xp, S0 - now.s * SA, 4, 0, 7); g.fill();
+  LANES.forEach((L, k) => { g.fillStyle = col('--panel'); g.beginPath(); g.arc(xp, Y(L, now[k]), 6, 0, 7); g.fill(); g.fillStyle = col(L[1]); g.beginPath(); g.arc(xp, Y(L, now[k]), 4, 0, 7); g.fill(); });
+  const tr = hoverT != null ? hoverT : tp, v = hoverT != null ? measure(b, tr) : now, sg = x => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2);
+  const rd = $('readout'), txt = `${hoverT != null ? 'pointer' : 'playhead'} ${tr.toFixed(2)} s   jaw ${v[0] < 0 ? 'pressed' : v[0].toFixed(2)}   lips ${sg(v[1])}   pitch ${sg(v[2])} st   brows ${sg(v[3])}   head ${sg(v[4])}`;
+  if (rd.textContent !== txt) rd.textContent = txt;
 }
-function seekChart(e) {
-  const r = chart.getBoundingClientRect(), [b, , i] = where(st.vt);
-  st.vt = starts[i] + clamp((e.clientX - r.left - PADL) / (r.width - PADL - PADR), 0, 1) * b.dur;
-}
+const chartT = e => { const r = chart.getBoundingClientRect(), b = where(st.vt)[0]; return clamp((e.clientX - r.left - PADL) / (r.width - PADL - PADR), 0, 1) * b.dur; };
+function seekChart(e) { st.vt = starts[where(st.vt)[2]] + chartT(e); }
 chart.addEventListener('pointerdown', e => { chart.setPointerCapture(e.pointerId); seekChart(e); });
-chart.addEventListener('pointermove', e => { if (e.buttons) seekChart(e); });
+chart.addEventListener('pointermove', e => { if (e.buttons) seekChart(e); hoverT = e.pointerType === 'mouse' ? chartT(e) : null; });
+chart.addEventListener('pointerleave', () => { hoverT = null; });
 
 /* ── transport ── */
 function setPlaying(v) { st.playing = v; $('play').textContent = v ? 'Pause' : 'Play'; }
@@ -241,6 +243,14 @@ const step = d => { setPlaying(false); st.vt = clamp(Math.round(st.vt * FPS + d)
 $('back').onclick = () => step(-1); $('fwd').onclick = () => step(1);
 $('scrub').oninput = e => { st.vt = e.target.value / 1000; };
 for (const el of document.querySelectorAll('[data-speed]')) el.onclick = () => { st.speed = +el.dataset.speed; for (const o of document.querySelectorAll('[data-speed]')) o.setAttribute('aria-pressed', o === el); };
+// Voices: the same lines in the two sets of recordings. Each set carries its own timing, so the whole show is laid out again.
+if (!SPEECH_FIRST) $('voices').hidden = true;
+for (const el of document.querySelectorAll('[data-voices]')) el.onclick = () => {
+  const [, , i] = where(st.vt), set = el.dataset.voices === 'first' ? SPEECH_FIRST : SPEECH; if (!set) return;
+  buildShow(set); curves = null; sndStop('cur'); if (snd.ac) sndLoad(set);
+  choose(st.who); st.vt = starts[Math.min(i, starts.length - 1)];
+  for (const o of document.querySelectorAll('[data-voices]')) o.setAttribute('aria-pressed', o === el);
+};
 for (const k of ['closeup', 'head', 'camera', 'captions', 'grain']) $('o-' + k).onchange = e => { st[k] = e.target.checked; };
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' && e.target.type === 'range') return;
@@ -259,7 +269,7 @@ function tick(ms) {
   const [b, bt, i] = where(st.vt);
   if (snd.ac && snd.on) {                      // keep the recording locked to the playhead, at the playback speed
     sndTo(snd.master, 0.85, 0.05);
-    if (st.playing && snd.ready) sndPlay('cur', b.ai, snd.bufs[b.ai], snd.chain[sndVoiceKind(b)], bt - LEAD + sndLatency() * st.speed, st.speed); else sndStop('cur');
+    if (st.playing && snd.ready) sndPlay('cur', b.ai, snd.bufs[b.ai], snd.chain[sndVoiceKind(b)], bt - b.lead + sndLatency() * st.speed, st.speed); else sndStop('cur');
   }
   $('tc').textContent = fmt(st.vt) + ' / ' + fmt(total);
   if (document.activeElement !== $('scrub')) $('scrub').value = Math.round(st.vt * 1000);
