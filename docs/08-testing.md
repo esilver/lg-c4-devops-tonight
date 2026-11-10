@@ -104,3 +104,16 @@ timeline at both ends, because the recorder's clock and the page's differ by a f
 Results on the final build are in [13](13-more-real.md), with the pose sheets in `tests/output/poses_*.jpg`.
 
 Still not checked: nobody watched or listened, and only Chromium was run.
+
+## Added in request 10
+
+The lip reference has its own checks inside `gen/lipteach.py map`: it reports how far the
+reference's lip closures are from the m, b and p sounds of the forced alignment, what the reference measures at rest
+against the photograph, and each line's typical and widest opening. `lipsync_check.py`, `face_stats.py`, `poses.js`,
+`demo_check.js`, `sound_check.js` and `asr_engine.py` were run again on the final build; the results are in
+[14](14-ios-sound-learned-lips-third-voices.md).
+
+`phoneme_strip.js` is new: it draws the mouth frame by frame, each frame labelled with the sound being made and the
+opening the page drew, which is how the mapping of the lip reference was debugged. `ios_sound_check.js` is new: it taps the Sound button on both pages in Chromium emulating an iPhone and reports the
+button's label, the silent keep-alive element, the audio session type and the audio context's state. That proves the
+iPhone-only code runs, not that a ringer switch is overridden.

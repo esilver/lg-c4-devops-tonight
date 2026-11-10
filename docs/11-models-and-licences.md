@@ -36,6 +36,9 @@ fetches from PyTorch's download server. Nothing in `gen/models/` is committed.
 | Whisper base (English) | `openai/whisper-base.en` | Checking the recordings by transcribing them. Not part of the result | MIT |
 | Chatterbox | `ResembleAI/chatterbox`, through the `chatterbox-tts` 0.1.7 package | The second set of voices (request 9). Its output carries its publisher's inaudible watermark | MIT |
 | wav2vec 2.0 phoneme recogniser | `facebook/wav2vec2-lv-60-espeak-cv-ft` | Timing the second voices by forced alignment. Not part of the result | Apache 2.0 |
+| Phonon 31M (English) | `gradium/phonon-31m-en` with voices from `gradium/phonon-voices`, through the `ptts` 0.7.0 package | The third set of voices (request 10) | Apache 2.0 for the model; the voices' own terms were not looked at |
+| Wav2Lip, ONNX export | `facefusion/models-3.0.0` (`wav2lip_96.onnx`) | The lip reference: its picture of the mouth is measured, never shown. Not part of the result as pixels | The original project allows research and personal use only, not commercial use |
+| 2DFAN4 face landmarks, ONNX export | `facefusion/models-3.0.0` (`2dfan4.onnx`) | Measuring lips in the reference and in the pose renders. Not part of the result | BSD for the original project; the export's own terms were not looked at |
 | SQUIM quality estimators | torchaudio 2.6.0 (`SQUIM_SUBJECTIVE`, `SQUIM_OBJECTIVE`), with torchaudio's sample recording of a real speaker as the reference | Estimating the quality of both voice sets. Not part of the result | BSD for torchaudio; the weights' and the sample's own terms were not looked at |
 
 ## Downloaded but not part of the result
@@ -62,6 +65,8 @@ its bundled Python wheel were deliberately not downloaded, and neither were its 
 | OpenCV (headless) | 5.0.0.93 |
 | Pillow | 13.0.0 |
 | Python for the speech model | 3.12, in `gen/venv3` (`gen/requirements-venv3.txt`) |
+| Python for the third speech model | 3.12 with `ptts` 0.7.0, in `gen/venv5` |
+| Python for the lip reference | 3.12 with onnxruntime 1.31.1, OpenCV, librosa 1.0.0, in `gen/venv6` |
 | Python for the second speech model, the aligner and the estimators | 3.11.18 with PyTorch 2.6.0 (CPU), transformers 5.2.0, librosa 0.11.0, in `gen/venv4` (`gen/requirements-venv4.txt`) |
 | Node / Playwright | 22.23.4 / 1.63.0 |
 | ffmpeg | 6.1.1 |
@@ -75,3 +80,10 @@ Google Fonts for its interface typeface and falls back to system fonts without i
 
 The scripts, the page source and these documents were written in the session for the person who asked for them. No
 licence file is included; that choice belongs to the repository's owner.
+
+## A note on the lip reference and reuse
+
+The mouth curves in `src/speech.json` were derived by measuring pictures made by Wav2Lip, whose authors license it for
+research and personal use. No Wav2Lip output appears in the page, but anyone who wants to use this page commercially
+should treat those curves as carrying that restriction, and can remove them: without the `lip` field of each line the
+page falls back to its own rule-based mouth.

@@ -14,6 +14,7 @@ readings printed while the pipeline ran. Where no reading exists, no time is giv
 | 7 | "Can I see demo after just that presenter so I can judge? Export all scripts and assets to a new repo, with Md files…" | The demo page, a recording, and this repository | demo at 22:47, `1794264437-c1e2` |
 | 8 | "can we make it even better? with perfect audio and just better overall?" | Voices, lips timed to them, sound design, visual fixes | 10 Nov 01:26, `1794273969-4f1d`; demo `1794274002-c6fe` |
 | 9 | "can we make the sound and video/lips/movements feel more real even", then "but also lips movements needs to be better, and the eye browes everything" | Late lips found and fixed; 53 mouth poses; brows and head moved on a mesh by the voice; glances; a second set of voices; room sound | work in progress 03:04, `1794279858-8b49`; demo `1794279862-fcbf`. Final 07:33, `1794296027-3c43`; demo `1794296082-d6f9` |
+| 10 | "Need to fix sound on iOS, also ty lips and the old yaml man still feel off. And the audio model still leaves to be desired" | Sound on iPhone; lips from a lip-sync network, fitted to each face; the guest repaired; a third set of voices | iOS fix 08:30, `1794299421-bfdf`; demo `1794299531-abbb`. New voices 08:57, `1794301057-5e2b`; demo `1794301062-a842`. Final 09:47, `1794304073-cbbe`; demo `1794304077-933e` |
 
 The main page's artifact was private for versions 1 to 3. Its owner made it public some time before version 4 was
 published, so versions 4 and 5 went to a public page. The demo page is a separate, private artifact.
@@ -163,3 +164,26 @@ Described in full in [13](13-more-real.md). In order:
 14. Transcribed the set's own output; that caught a take saying "pagers". Swapped the take, recorded the output again,
     rendered both videos (done by 03:21) and wrote this account. The session was then idle for about four hours; the
     final pages, unchanged since 03:25, were published at 07:33 and 07:34.
+
+## 10. Sound on iPhone, learned lips, the guest, a third set of voices (10 November, published 08:30, 08:57 and 09:47)
+
+Described in full in [14](14-ios-sound-learned-lips-third-voices.md). In order:
+
+1. Looked up why a page is silent on an iPhone while videos play (the ringer switch and the audio session class), wrote
+   the fix and a button that reports the real state, checked it in an emulated iPhone, and published at 08:30.
+2. Looked up how open speech models currently rank in blind listening tests. The second set of voices turned out to
+   rank below the first. Installed the highest-ranked model that runs on this machine and recorded three takes of every
+   line in about a minute.
+3. Looked at the guest frame by frame: eyes nearly shut, mouth barely moving, a stuttering picture. Measured his pose
+   renders: his mouth opens about half as far as the others'.
+4. Scored the takes, respelled two words the new model mispronounced, recorded that line again, chose a voice for the
+   guest from four candidates.
+5. Downloaded a lip-sync network and a landmark network as weights and wrote the code to run them. A first try on one
+   line worked, showed the mouths had been opening a third too little, and showed the stock windowing is 80 ms early.
+6. Measured every pose of every presenter for the calibration, and started measuring the reference on all sixteen new
+   recordings.
+7. Removed the guest's screen-watching pose, raised his picture to 25 a second, replaced the telephone effect on his
+   voice, and added the three-way voice switch to the demo page. Published the new voices at 08:57 while the reference
+   was still being measured.
+8. Mapped the reference onto each face, checked the result frame by frame and by measurement, recorded the set's output
+   again, rendered both videos, and published the final pages.

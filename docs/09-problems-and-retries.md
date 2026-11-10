@@ -129,3 +129,10 @@ The problems of this pass are tabulated at the end of [12](12-voices-and-sound.m
 
 The problems of this pass are listed at the end of [13](13-more-real.md). The largest was not a failure of this pass
 but a discovery about the last one: the lips had been running about 70 ms behind the voices since request 8.
+
+## Request 10: iPhone sound, learned lips, the guest, third voices
+
+Listed at the end of [14](14-ios-sound-learned-lips-third-voices.md). Two of them are corrections of earlier
+decisions rather than new failures: the hand-written mouth rules were replaced because nothing had ever checked them
+against real mouths, and the second set of voices was replaced because, by listeners' rankings, it had been a step
+down from the first.

@@ -182,3 +182,27 @@ The built pages of all five published versions are in the web artifact's own his
 | `tests/output/rec.webm`, `audio_analysis.txt`, `sound_check.json`, `asr_engine.txt` | evidence | Replaced: the set's output for this build, its analysis, and its transcript |
 
 The old pose renders and both old bundles stay in the repository because earlier documents refer to them.
+
+## Added in request 10
+
+| File | Status | What it is |
+|---|---|---|
+| `src/speech.json` | final | Now the third voices (Phonon): 16 MP3s with timing, pitch and the lip reference curves |
+| `src/speech_second.json` | final (demo page) | The second voices (Chatterbox), moved here from `src/speech.json` |
+| `src/speech_first.json` | final (demo page) | The first voices (Kokoro), as before |
+| `gen/work/tts3/NN_<who>_t<k>.wav` | final (the chosen takes) and rejected | 48 takes by the third speech model, three of each line, 32-bit float |
+| `gen/work/tts3/rejected/10_sunny_t*_retrees.wav`, `00_paige_t*_judy.wav`, `13_cy_t*_softch.wav` | rejected | Fifteen takes with a word mispronounced or unclear |
+| `gen/work/tts3/respell/10_*.wav`, `00_*.wav`, `13_*.wav` | evidence | Trial takes of respellings of those three lines |
+| `gen/work/tts3/alt_Edwin/`, `alt_Spencer/`, `alt_Old_Mortlake/` | rejected | The guest's line in three other voices |
+| `gen/work/tts3/script.json`, `takes.json`, `lines.json` | intermediate | The text as spoken and the cast; every take's transcript and scores; the chosen takes with timing |
+| `gen/work/bundle/` | final (the MP3s) | Now the third voices, trimmed and levelled |
+| `gen/work/bundle_second/`, `gen/work/bundle_first/` | final (demo page) | The second and first voices |
+| `gen/work/lipcal.json` | intermediate | The calibration: lip opening and mouth width of every pose of every presenter |
+| `gen/work/bundle*/lip_raw.json` | intermediate | The lip reference as measured: opening, lip height and width for every 1/50 s (1/25 s for the two older sets) of every line |
+| `gen/out/w2l_proto_paige.jpg` | evidence | Six frames of the lip-sync network's own picture of the first anchor, from the first trial |
+| `gen/logs/log_align3.txt`, `log_lipteach*.txt` | evidence | Logs of this pass |
+| `tests/output/strip_mel_pane.jpg`, `poses_big_mel.jpg`, `mel_now.jpg` | evidence | The guest before (eyes nearly shut, mouth barely open), his eyes-down and half-blink poses, and after |
+| `tests/output/phon_paige.jpg` | evidence | The first anchor's mouth, frame by frame, labelled with the sound being made and the opening drawn |
+| `tests/output/strip_taught_paige.jpg`, `strip_taught_mel.jpg` | evidence | Film strips with the learned lips: the first line, and the guest's answer |
+
+`gen/models/w2l/` (the lip-sync and landmark networks, 390 MB) is not committed.

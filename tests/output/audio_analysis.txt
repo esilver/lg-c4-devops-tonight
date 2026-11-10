@@ -1,31 +1,31 @@
-recording 113.0 s, peak 0.77
+recording 110.0 s, peak 0.70
 titles 0.3-4.8 s: -25.8 dBFS rms
-line  0: expected at   5.268 s, found at   5.187 s, difference  -80.6 ms, level -24.3 dBFS
-line  1: expected at  10.708 s, found at  10.631 s, difference  -77.3 ms, level -24.4 dBFS
-line  2: expected at  16.378 s, found at  16.285 s, difference  -93.2 ms, level -24.3 dBFS
-line  3: expected at  25.758 s, found at  25.669 s, difference  -89.2 ms, level -23.7 dBFS
-line  4: expected at  34.038 s, found at  33.952 s, difference  -86.3 ms, level -24.0 dBFS
-line  5: expected at  39.428 s, found at  39.337 s, difference  -91.0 ms, level -22.9 dBFS
-line  6: expected at  47.218 s, found at  47.125 s, difference  -93.2 ms, level -23.9 dBFS
-line  7: expected at  51.468 s, found at  51.374 s, difference  -94.0 ms, level -23.8 dBFS
-line  8: expected at  56.337 s, found at  56.251 s, difference  -86.2 ms, level -25.1 dBFS
-line  9: expected at  60.847 s, found at  60.754 s, difference  -92.7 ms, level -24.0 dBFS
-line 10: expected at  66.477 s, found at  66.389 s, difference  -88.2 ms, level -24.0 dBFS
-line 11: expected at  75.807 s, found at  75.708 s, difference  -99.0 ms, level -24.0 dBFS
-line 12: expected at  84.437 s, found at  84.328 s, difference -108.9 ms, level -23.9 dBFS
-line 13: expected at  92.107 s, found at  92.008 s, difference  -99.4 ms, level -25.0 dBFS
-line 14: expected at  94.847 s, found at  94.741 s, difference -106.1 ms, level -24.6 dBFS
-line 15: expected at 100.867 s, found at 100.756 s, difference -110.9 ms, level -24.2 dBFS
-start-of-recording offset (common to all lines): -93.5 ms; spread between lines: 33.6 ms
-music 'intro': 5.60 s, peak 0.71, rms -19.1 dBFS
+line  0: expected at   5.268 s, found at   5.174 s, difference  -93.8 ms, level -24.0 dBFS
+line  1: expected at  10.778 s, found at  10.687 s, difference  -91.1 ms, level -24.8 dBFS
+line  2: expected at  16.358 s, found at  16.264 s, difference  -94.1 ms, level -24.6 dBFS
+line  3: expected at  24.888 s, found at  24.798 s, difference  -90.4 ms, level -24.6 dBFS
+line  4: expected at  32.918 s, found at  32.831 s, difference  -87.0 ms, level -23.3 dBFS
+line  5: expected at  38.178 s, found at  38.087 s, difference  -91.2 ms, level -22.9 dBFS
+line  6: expected at  45.048 s, found at  44.960 s, difference  -88.2 ms, level -24.6 dBFS
+line  7: expected at  49.087 s, found at  48.998 s, difference  -89.2 ms, level -23.4 dBFS
+line  8: expected at  54.037 s, found at  53.944 s, difference  -93.0 ms, level -25.0 dBFS
+line  9: expected at  58.407 s, found at  58.312 s, difference  -94.9 ms, level -24.2 dBFS
+line 10: expected at  64.307 s, found at  64.217 s, difference  -89.8 ms, level -24.2 dBFS
+line 11: expected at  73.817 s, found at  73.722 s, difference  -94.8 ms, level -24.9 dBFS
+line 12: expected at  81.177 s, found at  81.087 s, difference  -90.1 ms, level -23.8 dBFS
+line 13: expected at  89.437 s, found at  89.348 s, difference  -88.9 ms, level -26.1 dBFS
+line 14: expected at  92.116 s, found at  92.027 s, difference  -88.9 ms, level -24.3 dBFS
+line 15: expected at  98.246 s, found at  98.152 s, difference  -93.5 ms, level -24.7 dBFS
+start-of-recording offset (common to all lines): -91.2 ms; spread between lines: 7.9 ms
+music 'intro': 5.60 s, peak 0.76, rms -19.1 dBFS
    0.00-0.75 s  rms  -17.1 dB   strongest: 73 Hz, 149 Hz, 293 Hz, 589 Hz
-   0.75-1.50 s  rms  -20.9 dB   strongest: 437 Hz, 443 Hz, 876 Hz, 880 Hz
+   0.75-1.50 s  rms  -21.0 dB   strongest: 437 Hz, 443 Hz, 876 Hz, 880 Hz
    1.50-2.25 s  rms  -19.1 dB   strongest: 73 Hz, 585 Hz, 589 Hz, 1175 Hz
    2.25-3.00 s  rms  -26.2 dB   strongest: 149 Hz, 440 Hz, 491 Hz, 496 Hz
-   3.00-3.75 s  rms  -14.1 dB   strongest: 73 Hz, 103 Hz, 147 Hz, 220 Hz
+   3.00-3.75 s  rms  -14.1 dB   strongest: 73 Hz, 101 Hz, 147 Hz, 220 Hz
    3.75-4.50 s  rms  -21.2 dB   strongest: 220 Hz, 1169 Hz, 1175 Hz, 1180 Hz
    4.50-5.25 s  rms  -24.9 dB   strongest: 147 Hz, 440 Hz, 1169 Hz, 1175 Hz
-music 'outro': 5.20 s, peak 0.66, rms -19.3 dBFS
+music 'outro': 5.20 s, peak 0.67, rms -19.3 dBFS
    0.00-0.75 s  rms  -16.6 dB   strongest: 73 Hz, 103 Hz, 147 Hz, 587 Hz
    0.75-1.50 s  rms  -20.8 dB   strongest: 73 Hz, 220 Hz, 368 Hz, 372 Hz
    1.50-2.25 s  rms  -14.4 dB   strongest: 73 Hz, 147 Hz, 295 Hz, 589 Hz

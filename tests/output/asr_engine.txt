@@ -1,16 +1,16 @@
- 0 paige | Good evening. This is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
- 1 cy    | and I'm side a car. It is 2026 and production is for the moment up.
+ 0 paige | Good evening, this is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
+ 1 cy    | and I'm side to car. It is 2026 and production is for the moment up.
  2 paige | Our top story, an AI agent opened 40 pull requests overnight. A second agent approved them. A human is now being paged.
- 3 cy    | Meanwhile, a routine Friday deploy is underway in US East 1. Deploy is at the scene. D.
- 4 dee   | Thanks, Sai. The pipeline behind me has been green for nine minutes and nobody here trusts it.
- 5 dee   | Engineers have checked the dashboards, the rollback plan, and DNS sources say it is always DNS.
+ 3 cy    | Meanwhile, a routine Friday deploy is underway in U.S. East One. Deploy is at the scene. D?
+ 4 dee   | Thanks, Si. The pipeline behind me has been green for nine minutes, and nobody here trusts it.
+ 5 dee   | Engineers have checked the dashboards, the rollback plan, and DNS. Sources say it is always DNS.
  6 cy    | Did anyone suggest waiting until Monday?
- 7 dee   | One person did sign. They have been moved to the platform team. Back to you.
+ 7 dee   | One person did cite. They have been moved to the platform team. Back to you.
  8 paige | Brave work. Now the cloud forecast with sunny uptime.
- 9 sunny | Thanks, Paige. Pods are stuck pending across the north while the autoscaler thinks about it.
-10 sunny | In the south, scattered 503s with a chance of retries, four nines along the coast, and a high of $9,000 in egress.
-11 cy    | Joining us is YML, Staff YAML Engineer. With agents riding the config now, is your job safe.
-12 mel   | Si, the agent, writes 4,000 lines of yaml a day. Someone still has to find the one wrong indent.
+ 9 sunny | Thanks, Paige. Pods are stuck pending across the north while the auto-scaler thinks about it.
+10 sunny | In the south, scattered 503s with a chance of retries. Four nines along the coast and a high of $9,000 in egress.
+11 cy    | Joining us is why ML staff YAML engineer with agents writing the config now is your job safe.
+12 mel   | Sai, the agent, writes 4,000 lines of Yamala Day. Someone still has to find the one wrong indent.
 13 cy    | Chilling. Thank you for your time.
 14 paige | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it cost.
 15 cy    | From all of us in the control plane, good night, and may your pager stay quiet.
