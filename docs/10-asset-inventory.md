@@ -177,6 +177,7 @@ The built pages of all five published versions are in the web artifact's own his
 | `tests/output/poses_<presenter>.jpg`, `poses_big*.jpg` | evidence | Every pose forced, per presenter; brow and gaze poses at double size (including the drooping eyes that were dropped, `poses_big_dee.jpg`) |
 | `tests/output/strip_new1.jpg`, `strip_look.jpg`, `strip_split_*.jpg`, `g_scenes_a.jpg`, `g_scenes_b.jpg` | evidence | Film strips of the first line, the glance on "Dee?", the two conversations; every scene |
 | `tests/output/demo_desktop.png`, `demo_phone.png`, `demo_closeup.png`, `demo_first_voices.png` | evidence | The demo page |
+| `tests/output/tv_new_desktop.png`, `tv_new_phone.png` | evidence | The television page on this build at desktop and phone size, with the camera moved in close |
 | `tests/output/lipsync*.json`, `lipsync_report.txt` | evidence | Mouth curves of the three builds compared, and the result |
 | `tests/output/rec.webm`, `audio_analysis.txt`, `sound_check.json`, `asr_engine.txt` | evidence | Replaced: the set's output for this build, its analysis, and its transcript |
 

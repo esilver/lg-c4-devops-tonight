@@ -189,8 +189,9 @@ The new set, rendered with the same re-posing model as before:
 | sg | smiling | 8 |
 | | lips pressed (m, b, p); half smile, mouth shut | 1 each |
 
-Neighbouring poses differ by a pixel or two at the lips. 54 renders per presenter including two brow poses, about
-eight to nine minutes each (they shared the machine with the voice jobs).
+Neighbouring poses differ by a pixel or two at the lips. That is 54 renders per presenter including two brow poses.
+The first 45 took seven and a half to nine and a half minutes a presenter while sharing the machine with the voice
+jobs; the nine smiling ones about a minute and a half.
 
 At run time the jaw value picks two neighbouring steps in a row and the lip shape picks two neighbouring rows, so at
 most four poses are blended, plus the smile row. A smile with the mouth shut grows through the half smile. Rounded
@@ -258,7 +259,8 @@ the ears and hairline barely move, which is the parallax a flat slide cannot giv
 
 The fields fade to nothing before the edge of the model's crop and outside the person's matte, so shoulders and
 background stay still. With the two brow fields that makes six per presenter, sampled on a grid about a ninth of the eye
-distance apart (7 to 12 px, roughly 50 × 47 points), stored as signed bytes with their own scale: 35 to 40 KB each.
+distance apart (7 to 12 px, roughly 50 × 47 points), stored as signed bytes with their own scale: 35 to 40 KB a
+presenter.
 A first version stored them in eighths of a pixel and silently clipped anything beyond 15.9 px; it was caught before the
 page used it.
 
