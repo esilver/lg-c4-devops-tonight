@@ -221,3 +221,10 @@ as pictures because a link is not always what a forum wants.
 
 At 21:00 the one-pager was republished without the television: the requester wanted it to describe only how the video
 is made, to link beside the video.
+
+## 13. A live avatar, as a proof of concept (10 November, published 22:22)
+
+Described in [17](17-live-avatar-poc.md). After the post went up the requester said the real goal was an avatar of
+themselves, and asked whether what exists could be the base of a quick live proof of concept. The artifact viewer
+offers a call to Claude, a voice and dictation, so the page only had to join those to the engine: a guess at the
+mouth from the spelling of the reply, and a clock that keeps it in step with the voice.

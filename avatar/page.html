@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Avatar Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* The screening room of the lip-sync demo, turned into a call: the picture leads, the conversation sits under it,
+     amber marks whatever is live. One column, 800 px at most. One world, so one theme. */
+  :root {
+    color-scheme: dark;
+    --bg: #171b21; --panel: #20262e; --line: #343d49; --ink: #ece9e2; --muted: #9aa4b0; --accent: #f2b23e;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --data: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body); }
+  main { max-width: 832px; margin: 0 auto; padding: 20px 16px 36px; display: grid; gap: 14px; }
+  h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 68ch; font-size: 15px; }
+  .stage { position: relative; }
+  canvas { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; background: #000; border-radius: 8px; }
+  #state { position: absolute; left: 12px; top: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 999px; background: rgba(12, 15, 19, .78); font: 500 12.5px var(--data); letter-spacing: .04em; text-transform: uppercase; }
+  #state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  #state[data-s=speaking]::before, #state[data-s=listening]::before { background: var(--accent); }
+  #state[data-s=thinking]::before { background: var(--accent); animation: blip 1s infinite; }
+  @keyframes blip { 50% { opacity: .25; } }
+  @media (prefers-reduced-motion: reduce) { #state[data-s=thinking]::before { animation: none; } }
+  #cap { margin: 0; min-height: 3em; font-size: 18px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+  #cap b { color: var(--ink); font-weight: 500; }
+  form { display: flex; flex-wrap: wrap; gap: 8px; }
+  #say { flex: 1 1 240px; min-width: 0; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 9px 12px; }
+  button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 8px 14px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #send { font-weight: 600; background: var(--accent); color: #1a1407; border-color: var(--accent); }
+  button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; color: var(--muted); font-size: 14px; }
+  .row label { display: inline-flex; gap: 8px; align-items: center; }
+  #log { display: grid; gap: 8px; margin: 0; padding: 12px; list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; max-height: 260px; overflow-y: auto; font-size: 15px; }
+  #log:empty { display: none; }
+  #log li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
+  #log span { font: 500 12px var(--data); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+  .note { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 76ch; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Live Avatar Demo</h1>
+    <p>Say or type something and the presenter answers out loud. The reply comes from Claude, the face is one photograph, and the lips are worked out from the words as they are spoken.</p>
+  </header>
+  <div class="stage">
+    <canvas id="screen" width="768" height="576" aria-label="The presenter"></canvas>
+    <span id="state" data-s="idle" aria-live="polite">Loading</span>
+  </div>
+  <p id="cap" aria-live="polite"></p>
+  <form id="talk" autocomplete="off">
+    <input id="say" type="text" placeholder="Type something to say" aria-label="What you say" maxlength="500">
+    <button id="send" type="submit">Send</button>
+    <button id="mic" type="button" aria-pressed="false" hidden>Speak</button>
+    <button id="stop" type="button" hidden>Stop</button>
+  </form>
+  <div class="row">
+    <label for="voice" id="voiceRow" hidden>Voice <select id="voice"><option value="airy">Airy</option><option value="buttery">Buttery</option><option value="glassy">Glassy</option><option value="rounded">Rounded</option></select></label>
+    <span id="how"></span>
+  </div>
+  <ol id="log" aria-label="Conversation"></ol>
+  <p class="note">A proof of concept. The presenter is an AI-generated still, not a real person, and she is an AI. Her lips are guessed from the spelling of each word and kept in step with the voice as it plays, so they are plausible, not exact. Nothing you say is kept by this page.</p>
+</main>
+<script>
+'use strict';
+// Plain JavaScript, no libraries. The bulletin's own engine (below, unchanged) draws the presenter. This page adds the
+// live part: a reply from Claude, a voice, a guess at the mouth from the words, and a clock that keeps the two together.
+const SW = 1024, SH = 576, scr = document.getElementById('screen'), c = scr.getContext('2d');
+const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+let switchedAt = -10;
+/*NEWS*/
+/* ───────────────────────── Live ───────────────────────── */
+const WHO = Object.keys(ASSETS.cast)[0], $ = id => document.getElementById(id);
+const T0 = performance.now(), wall = () => performance.now() / 1000, clock = () => (performance.now() - T0) / 1000;      // the show's clock starts when the page does
+const PRE = 0.1, PACE = 13;                    // seconds of a line before its first sound; letters a second the voice is assumed to speak
+const PERSONA = `You are the presenter on screen in a live avatar demo: an AI avatar, friendly and quick. You are speaking out loud, so answer in one or two short sentences of plain spoken English. No lists, no markdown, no emoji, no stage directions. Write numbers as words. If asked, say plainly that you are an AI avatar made from one generated photograph.`;
+
+/* ── from a sentence to the sounds a mouth makes ──
+   A rough guess at English pronunciation from spelling. It does not need to get the word right, only the mouth: where
+   the lips meet (p, b, m), where they round (w, oo, oh), where the jaw drops (ah). Symbols are the engine's own. */
+const DIGIT = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const PAIR = { th: ['θ'], sh: ['ʃ'], ch: ['ʧ'], ph: ['f'], wh: ['w'], ck: ['k'], ng: ['ŋ'], qu: ['k', 'w'], gh: [], kn: ['n'], wr: ['ɹ'],
+  ee: ['i:'], ea: ['i:'], ie: ['i:'], oo: ['u:'], ou: ['W:'], ow: ['W:'], ai: ['A:'], ay: ['A:'], ei: ['A:'], ey: ['A:'], oi: ['Y:'], oy: ['Y:'],
+  au: ['ɔ:'], aw: ['ɔ:'], oa: ['O:'], ar: ['ɑ:', 'ɹ'], or: ['ɔ:', 'ɹ'], er: ['ɜ', 'ɹ'], ir: ['ɜ', 'ɹ'], ur: ['ɜ', 'ɹ'] };
+const ONE = { a: 'æ', e: 'ɛ', i: 'ɪ', o: 'ɑ', u: 'ʌ', b: 'b', d: 'd', f: 'f', h: 'h', j: 'ʤ', k: 'k', l: 'l', m: 'm', n: 'n', p: 'p', q: 'k', r: 'ɹ', s: 's', t: 't', v: 'v', w: 'w', z: 'z' };
+const NAME = { a: 'A', e: 'i', i: 'I', o: 'O', u: 'u' }, VOWELS = 'ɑæaʌɔɒɛɜɪiʊuAIWYOQə';
+const SMALL = new Set('a an the of to in on at for and or but is are was were be been am it its this that these those with as by from i you he she we they me my your his her our their do does did not no so if then than too very just can will would could should have has had there here what when where who how'.split(' '));
+function sounds(word) {
+  const out = [], put = s => { const long = s.endsWith(':'), ch = long ? s.slice(0, -1) : s, v = VOWELS.includes(ch), z = out[out.length - 1]; if (v || !z || z.ch !== ch) out.push({ ch, v, long }); };
+  for (const w of word.toLowerCase().replace(/\d/g, d => ' ' + DIGIT[+d] + ' ').replace(/[^a-z ]/g, '').split(' ').filter(Boolean)) {
+    const n = w.length, isV = ch => 'aeiou'.includes(ch);
+    for (let i = 0; i < n;) {
+      const a = w[i], b = w[i + 1] || '', two = a + b, rest = w.slice(i);
+      if (rest.startsWith('igh')) { put('I:'); i += 3; }
+      else if (rest.startsWith('tch')) { put('ʧ'); i += 3; }
+      else if (rest === 'tion' || rest === 'sion') { put('ʃ'); put('ə'); put('n'); i += 4; }
+      else if (rest === 'le' && i > 0) { put('ə'); put('l'); i += 2; }
+      else if (rest === 'ed' && i > 0 && !'td'.includes(w[i - 1])) { put('d'); i += 2; }                        // "asked": no extra syllable
+      else if (PAIR[two] && !(two === 'er' && i === 0)) { PAIR[two].forEach(put); i += 2; }
+      else if (isV(a) && b && !isV(b) && i + 2 === n - 1 && w[n - 1] === 'e') { put(NAME[a] + ':'); i += 1; }      // "make", "time": the vowel says its name
+      else if (a === 'e' && i === n - 1 && n > 2 && /[aeiouy]/.test(w.slice(0, -1))) i += 1;                      // a final e is silent
+      else if (a === 'y') { put(i === 0 ? 'j' : i === n - 1 ? (n <= 3 ? 'I:' : 'i') : 'ɪ'); i += 1; }
+      else if (a === 'c') { put('eiy'.includes(b) && b ? 's' : 'k'); i += 1; }
+      else if (a === 'g') { put('eiy'.includes(b) && b ? 'ʤ' : 'ɡ'); i += 1; }
+      else if (a === 'x') { put('k'); put('s'); i += 1; }
+      else { if (ONE[a]) put(ONE[a]); i += 1; }
+    }
+  }
+  return out;
+}
+/* Lays a line out in time: every sound with a start and a length, the words for the caption, a little invented melody
+   (the voice falls through a sentence and lifts on some stressed words) so that nods and brows have something to follow.
+   This is a plan. The voice that actually speaks will be a little faster or slower, and the clock below corrects for it. */
+function plan(text) {
+  const toks = text.trim().split(/\s+/).filter(Boolean), items = [], words = []; let at = 0, letters = 0;
+  toks.forEach((tok, k) => {
+    const core = tok.replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, ''), end = (tok.match(/[,.;:!?…]+$/) || [''])[0], small = SMALL.has(core.toLowerCase()), ph = sounds(core);
+    if (small) for (const p of ph) if (p.v && !p.long) p.ch = 'ə';                                             // little words are swallowed
+    const st = small ? -1 : ph.findIndex(p => p.v); letters += core.replace(/\d/g, 'four').length;
+    words.push({ tok, i: items.length, c: at }); at += tok.length + 1;
+    ph.forEach((p, j) => items.push({ ch: p.ch, v: p.v, st: j === st, k, d: p.v ? (p.long ? 0.13 : 0.085) * (j === st ? 1.3 : 1) : 'pbm'.includes(p.ch) ? 0.075 : 'sʃfθʧz'.includes(p.ch) ? 0.085 : 0.06 }));
+    items.push(end ? { stop: end[0], d: /[.!?…]/.test(end) ? 0.3 : 0.17 } : { d: 0.015 });
+  });
+  let sum = 0; for (const it of items) if (it.ch) sum += it.d;
+  if (!sum) return null;
+  const scale = clamp(letters / PACE / sum, 0.6, 1.8), seg = [], stress = []; let t = 0.02;
+  items.forEach((it, i) => {
+    for (const w of words) if (w.i === i) w.t = t;
+    if (it.ch) { const d = it.d * scale, loud = it.st ? 0.95 + 0.55 * hash(it.k, 1) : 0.7; if (it.st) { seg.push(['ˈ', t, 0, 0]); stress.push([t + d * 0.4, hash(it.k, 2) < 0.45 ? 3.5 : 0.8]); } seg.push([it.ch, t, d, loud]); t += d; }
+    else if (it.stop) { seg.push([it.stop, t, it.d, 0]); t += it.d; } else t += it.d;
+  });
+  for (const w of words) if (w.t == null) w.t = t;
+  const len = t + 0.05, ask = /\?\s*$/.test(text); let f0 = '';
+  for (let x = 0; x < len; x += 0.04) { let st = 2 - 4 * x / len + (ask ? 5 * rise(x, len - 0.55, len - 0.12) : 0); for (const [ts, up] of stress) st += up * gauss(x - ts, 0.13); f0 += String.fromCharCode(clamp(Math.round(78 + 2 * st), 58, 112)); }
+  return { words: words.map(w => [w.tok, w.t]), chars: words.map(w => w.c), seg, len, f0 };
+}
+
+/* ── the engine's timelines, kept going for as long as the page is open ── */
+const live = { state: 'loading', n: 0, beat: null, idle: null, stretch: 1, breath: [], until: 0, think: 0, turn: null, cur: -1, seq: 0, history: [] };
+const sync = { plan: 0, at: 0, k: 1, on: false, line: -1, started: 0, heard: 0 };          // planned time `plan` was reached at wall time `at`; the voice runs `k` times slower than planned
+const planned = () => sync.on ? sync.plan + (wall() - sync.at) / sync.k : 0;
+// Breathing: the engine expects a finished timeline. Here it is finished again whenever something is added: quiet
+// breaths up to each breath taken for speech, and on for twenty minutes after the last one.
+function breathe() {
+  const T = [-8], Y = [0.4]; let n = 0;
+  const idle = until => { for (;;) { const k = T.length - 1, up = Y[k] < 0.5, d = (up ? 1.5 : 2.4) * (0.85 + 0.3 * hash(n, WHO.length)); if (T[k] + d > until) return; n++; T.push(T[k] + d); Y.push(up ? 0.62 + 0.08 * hash(n, 3) : 0.34 + 0.06 * hash(n, 5)); } };
+  for (const [t, lv] of live.breath) {
+    if (lv < 0) { idle(t - 0.3); const k = T.length - 1, up = Y[k] < 0.5, f = clamp((t - T[k]) / (up ? 1.5 : 2.4), 0, 1); T.push(Math.max(t, T[k] + 0.05)); Y.push(up ? Y[k] + 0.2 * f : Y[k] - 0.25 * f); }
+    else { T.push(Math.max(t, T[T.length - 1] + 0.02)); Y.push(lv); }
+  }
+  live.until = clock() + 1200; idle(live.until); BREATH[WHO] = { T, Y, M: slopes(T, Y) };
+}
+function rest(ts) { live.idle = { who: WHO, start: ts, dur: 1e9, mo: { back: [] } }; live.beat = null; sync.on = false; }
+// The voice has reached line i of the reply being spoken (each line is begun once, whichever signal reports it first).
+function reach(i) { const L = live.turn; if (!L || !L[i] || live.cur === i) return; live.cur = i; finish(); begin(L[i], clock()); }
+// A line begins: its audio has just started. The engine builds jaw, lips, nods, brows and posture for it.
+function begin(line, ts) {
+  const sp = plan(line.text); if (!sp) return;
+  const b = { who: WHO, start: ts - PRE, lead: PRE, ai: live.n++, sp, tail: 0.5 };
+  if (line.first) b.sm = [[WHO, 0, 0.22, 0.55]];                                                                // she starts on a smile
+  BREATH[WHO] = live.breath; buildSpeech(b); live.breath = BREATH[WHO]; breathe();
+  live.beat = b; sync.plan = 0; sync.at = wall(); sync.k = live.stretch; sync.on = true; sync.started = wall(); sync.heard = 0;
+}
+// A line ends: how long it really took against the plan tells how fast this voice speaks, for the lines that follow.
+function finish() {
+  const b = live.beat; if (!b || !sync.on) return;
+  const took = sync.heard > 0.5 ? sync.heard : wall() - sync.started, meant = b.t1 - PRE;
+  if (meant > 0.8 && took > 0.5) live.stretch = clamp(0.5 * live.stretch + 0.5 * took / meant, 0.6, 1.7);
+}
+// The engine's own face and body, with two things added: what was laid out a moment ago for a sound that has only just
+// started is eased in (the smile letting go, the breath), and while a reply is being thought of the eyes go aside.
+const face0 = faceAt, body0 = bodyAt, ease1 = { g: 0.5, lift: 0, t: -1 };
+faceAt = (id, b, bt, ts, still) => {
+  const q = face0(id, b, bt, ts, still), dt = ease1.t < 0 ? 1 : clamp(ts - ease1.t, 0, 1), k = 1 - Math.exp(-dt / 0.14); ease1.t = ts;
+  ease1.g += (q.g - ease1.g) * k; q.g = ease1.g;
+  live.think += ((live.state === 'thinking' ? 1 : 0) - live.think) * (1 - Math.exp(-dt / 0.2));
+  if (live.think > 0.01) { const h = live.think; q.gx += (0.6 - q.gx) * h; q.gy = Math.max(q.gy, 0.22 * h); q.yaw = clamp(q.yaw + 0.16 * h, -1, 1); q.bu = Math.max(q.bu, 0.14 * h); }
+  ease1.k = k; return q;
+};
+bodyAt = (id, q, ts) => { const o = body0(id, q, ts); ease1.lift += (o.lift - ease1.lift) * ease1.k; o.lift = ease1.lift; return o; };
+
+/* ── a voice: Claude's where the page is given one, the browser's own otherwise, none at all in the last resort ── */
+const io = { sample: null, tts: null, dictation: null, voice: 'speechSynthesis' in window ? 'browser' : 'none' };
+function speak(lines) {
+  // resolves when every line has been heard (or stopped); calls begin() as each line starts
+  if (io.voice === 'claude') return io.tts.speak(lines.map((l, i) => ({ text: l.text, id: 'l' + i })), { voice: $('voice').value });
+  if (io.voice === 'browser') return new Promise(done => {
+    let i = 0; const next = () => {
+      if (i >= lines.length || live.turn !== lines) return done();
+      const k = i++, u = new SpeechSynthesisUtterance(lines[k].text);
+      // A browser with no voice installed either fails at once or never starts. Either way the rest is mouthed instead.
+      let started = false, gone = false; const fail = () => { if (gone) return; gone = true; u.onstart = u.onend = u.onerror = u.onboundary = null; try { speechSynthesis.cancel(); } catch (e) {} io.voice = 'none'; note(); mouthed(lines, k, done); };
+      const dead = setTimeout(fail, 2500);
+      u.onstart = () => { started = true; clearTimeout(dead); reach(k); };
+      u.onboundary = e => { const b = live.beat; if (!b || !sync.on || (e.name && e.name !== 'word')) return; let w = 0; while (w + 1 < b.sp.chars.length && b.sp.chars[w + 1] <= e.charIndex) w++;
+        const meant = b.sp.words[w][1], took = wall() - sync.started; if (meant > 0.6) { live.stretch = clamp(0.6 * live.stretch + 0.4 * took / meant, 0.6, 1.7); sync.k = live.stretch; } sync.plan = meant; sync.at = wall(); };
+      u.onend = () => { clearTimeout(dead); if (started) next(); else fail(); };
+      u.onerror = e => { clearTimeout(dead); if (e && (e.error === 'interrupted' || e.error === 'canceled')) next(); else fail(); };
+      speechSynthesis.speak(u);
+    }; next();
+  });
+  return new Promise(done => mouthed(lines, 0, done));
+}
+// no voice: the lines are mouthed at the planned pace
+function mouthed(lines, from, done) {
+  let i = from; const next = () => { if (i >= lines.length || live.turn !== lines) return done(); reach(i++); setTimeout(next, 1000 * ((live.beat ? live.beat.sp.len : 1) * live.stretch + 0.25)); }; next();
+}
+function hush() { live.turn = null; try { if (io.voice === 'claude') io.tts.stop(); else if (io.voice === 'browser') speechSynthesis.cancel(); } catch (e) {} }
+
+function note() { $('how').textContent = (io.sample ? 'Replies come from Claude.' : 'Claude is not available in this view, so the reply is a stock line.') + ' ' + (io.voice === 'claude' ? 'The voice is one of Claude\'s.' : io.voice === 'browser' ? 'The voice is this device\'s own.' : 'There is no voice here, so the words are mouthed and shown.'); }
+/* ── the conversation ── */
+function setState(s, label) { live.state = s; const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
+function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; }
+async function reply(text) {
+  const msgs = [{ role: 'user', content: PERSONA }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
+  if (!io.sample) return "I can't reach Claude from this view, so this is a line I keep ready to show the lips moving.";
+  try { const r = await io.sample(msgs, { modelTier: 'quick', cache: false }); return (r.text || '').trim(); }
+  catch (e) { return e && e.code === 'rate_limited' ? 'I need a moment before I can answer again.' : "I couldn't get an answer just now."; }
+}
+async function turn(text) {
+  text = text.trim(); if (!text) return;
+  const my = ++live.seq; hush(); if (live.beat) { finish(); rest(clock()); }                                  // a new question cuts her off
+  say('You', text); live.history.push({ role: 'user', content: text });
+  if (live.idle) live.idle.mo.back.push([clock() - live.idle.start + 0.25, 0.6]);                              // a small nod: heard you
+  setState('thinking', 'Thinking'); $('cap').textContent = '';
+  const answer = (await reply(text)).replace(/[*_#`]/g, '').slice(0, 600) || 'Sorry, say that again?';
+  if (my !== live.seq) return;                                                                                // something newer was asked meanwhile
+  live.history.push({ role: 'assistant', content: answer }); say('Avatar', answer);
+  const lines = (answer.match(/[^.!?…]+[.!?…]*\s*/g) || [answer]).map(s => ({ text: s.trim() })).filter(l => /[A-Za-z0-9]/.test(l.text));
+  if (!lines.length) { setState('idle', 'Ready'); return; }
+  lines[0].first = true; live.turn = lines; live.cur = -1;
+  // before the first sound: the smile lets go and a breath goes in, as they would
+  const ts = clock(), span = [ts + 0.45, 1e9]; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe();
+  setState('speaking', 'Speaking');
+  try { await speak(lines); } catch (e) {}
+  span[1] = clock(); if (my !== live.seq) return;
+  finish(); live.turn = null; rest(clock()); setState('idle', 'Ready');
+}
+$('talk').addEventListener('submit', e => { e.preventDefault(); const v = $('say').value; $('say').value = '';
+  if (io.voice === 'browser' && !io.unlocked) { io.unlocked = true; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (x) {} }      // some browsers only speak after a first tap
+  turn(v); });
+$('stop').onclick = () => hush();
+
+/* ── picture ── */
+function frame() {
+  const ts = clock(), a = ACT[WHO];
+  if (pending > 0) { requestAnimationFrame(frame); return; }
+  if (live.state === 'loading') { rest(ts); breathe(); setState('idle', 'Ready'); }
+  if (ts > live.until - 120) breathe();                          // keep the quiet breathing going
+  const b = live.beat || live.idle, bt = live.beat ? PRE + planned() : ts - live.idle.start, f = a.m.face;
+  c.setTransform(1, 0, 0, 1, -clamp(f.cx - 384, 0, FW - 768), 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  drawActor(WHO, ts, { b, bt, zb: 1, zf: 1.02 });
+  if (live.beat) {                                                // the caption: the line, with the words said so far in full ink
+    let n = 0; while (n < b.wt.length && b.wt[n] <= bt) n++;
+    if (frame.n !== n || frame.b !== b) { frame.n = n; frame.b = b; const el = $('cap'), said = document.createElement('b'); said.textContent = b.words.slice(0, n).join(' '); el.textContent = ''; el.append(said, n ? ' ' : '', b.words.slice(n).join(' ')); }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ── what this view of the page can do ── */
+(async () => {
+  const use = n => window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null);
+  use('sample').then(s => { io.sample = s; note(); });
+  use('tts').then(t => {
+    if (t) { io.tts = t; io.voice = 'claude'; $('voiceRow').hidden = false;
+      // Three signals say where the voice is: a line starting, the voice starting at all (then it is on the first line),
+      // and the position within a line (which starts again from nothing when the next line begins).
+      t.onLine(({ line, id }) => reach(id != null ? +String(id).slice(1) : +line));
+      t.onState(({ state }) => { if (state === 'speaking' && live.cur < 0) reach(0); });
+      t.onPosition(({ ms }) => { if (live.cur < 0) reach(0); if (!sync.on) return; const at = ms / 1000; if (at < sync.heard - 0.3) reach(live.cur + 1); sync.heard = at; sync.plan = at / sync.k; sync.at = wall(); }); }
+    note();
+  });
+  use('dictation').then(d => {
+    if (!d) return; io.dictation = d; const mic = $('mic'); mic.hidden = false; let heard = '';
+    d.onPartial(({ text }) => { $('say').value = (heard + ' ' + text).trim(); });
+    d.onFinal(({ text }) => { heard = (heard + ' ' + text).trim(); $('say').value = heard; d.stop().catch(() => {}); });      // one phrase is one turn
+    d.onState(({ state }) => { const on = state === 'listening'; mic.setAttribute('aria-pressed', on); mic.textContent = on ? 'Listening…' : 'Speak'; if (on) setState('listening', 'Listening'); else { if (live.state === 'listening') setState('idle', 'Ready'); const v = heard; heard = ''; if (v) { $('say').value = ''; turn(v); } } });
+    mic.onclick = () => { if (mic.getAttribute('aria-pressed') === 'true') d.stop().catch(() => {}); else { hush(); heard = ''; d.start().catch(() => {}); } };
+  });
+  note();
+})();
+</script>
+</body>
+</html>

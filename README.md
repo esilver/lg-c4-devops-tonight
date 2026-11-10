@@ -21,6 +21,7 @@ one working session on 9 and 10 November 2026 by an AI coding agent (Claude Code
 | One presenter, large, with slow motion, frame stepping, a face close-up, switches for head and for body and hair movement, and a switch between three sets of voices | [`demo/index.html`](demo/index.html) |
 | The whole bulletin as a video with sound | [`demo/devops-tonight.mp4`](demo/devops-tonight.mp4), 1 min 47 s |
 | The same video with no sound track | [`demo/devops-tonight-silent.mp4`](demo/devops-tonight-silent.mp4) |
+| A proof of concept of a live avatar: say something and one presenter answers out loud | [`avatar/index.html`](avatar/index.html); the reply and voice need the published copy |
 | How the presenters are animated and which local models did what, on one page with pictures | [`onepager/index.html`](onepager/index.html), also as [one picture](onepager/devops-tonight-how-it-was-made-8000.jpg) and as three ([1](onepager/devops-tonight-how-it-was-made-part1.jpg), [2](onepager/devops-tonight-how-it-was-made-part2.jpg), [3](onepager/devops-tonight-how-it-was-made-part3.jpg)) |
 | One presenter's lines as a video with sound | [`demo/paige-lipsync.mp4`](demo/paige-lipsync.mp4), full frame beside a face close-up |
 
@@ -34,6 +35,7 @@ Controls on the main page: drag to orbit, scroll or pinch to zoom, `←` `→` c
 | The television | https://claude.ai/artifact/MVwkTuSzuiyrPJeqyG4HhD | public |
 | The single-presenter demo | https://claude.ai/artifact/FoLsFQ1fwAKpfEUVhu1FAQ | private to its owner |
 | The one-pager | https://claude.ai/artifact/J9BWy4AQMGYFciULjomtvm | private to its owner |
+| The live avatar proof of concept | https://claude.ai/artifact/SEzGoZDjdWwejkZzg7agtC | private to its owner |
 
 ## Rebuild the pages
 
@@ -71,6 +73,7 @@ gen/work/<name>/      per presenter: refined frame, face crop, matte, every mout
                       (lp/ the earlier set, lp4/ the set built on a relaxed mouth), the body and hair maps, the plate
 gen/work/tts*/        every recording of every line, both speech models, with timing; gen/work/bundle*/ as inlined
 tests/                headless-browser scripts used to check the page, and their last outputs
+avatar/               the live avatar proof of concept: page.html (source), index.html (built), build.py, test.js
 onepager/             the one-page explainer: page.html (source), index.html (self-contained), its pictures, and the
                       scripts that gather them and export the page as pictures
 docs/                 the written account
@@ -96,6 +99,7 @@ docs/                 the written account
 | [`docs/14-ios-sound-learned-lips-third-voices.md`](docs/14-ios-sound-learned-lips-third-voices.md) | The fourth pass: sound on iPhone, lips taken from a lip-sync network and fitted to each face, the guest repaired, a third set of voices |
 | [`docs/15-body-hair-and-looser-lips.md`](docs/15-body-hair-and-looser-lips.md) | The fifth pass: torsos that breathe, shift and turn, hair on a spring, wind for the reporter, every mouth pose rebuilt on a relaxed mouth, and how the movement was measured |
 | [`docs/16-silent-video-and-one-pager.md`](docs/16-silent-video-and-one-pager.md) | A silent copy of the video, a clock fault in the renders, and the one-page explainer |
+| [`docs/17-live-avatar-poc.md`](docs/17-live-avatar-poc.md) | A proof of concept that talks back: Claude's reply and voice, lips guessed from the words and kept in step with the voice |
 
 ## Known limits
 
