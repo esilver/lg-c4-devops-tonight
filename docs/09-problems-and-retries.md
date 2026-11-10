@@ -136,3 +136,11 @@ Listed at the end of [14](14-ios-sound-learned-lips-third-voices.md). Two of the
 decisions rather than new failures: the hand-written mouth rules were replaced because nothing had ever checked them
 against real mouths, and the second set of voices was replaced because, by listeners' rankings, it had been a step
 down from the first.
+
+## Request 11: body, hair, looser lips
+
+Listed at the end of [15](15-body-hair-and-looser-lips.md). Most were found by measuring the first versions and
+looking at a chart of the result: a pinned band that held the shoulders still, shoulders that bounced on every
+stressed word, a body that rocked from side to side with the phrases. One was a discovery about every earlier pass:
+all five presenters had been talking through the closed-lip smile they were photographed with. One attempt was set
+aside: having the image model paint the room behind each presenter, which did not beat a simpler fill.

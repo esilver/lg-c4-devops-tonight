@@ -1,0 +1,66 @@
+paige frames 801 x 3, mesh: true errors: []
+paige: 801 frames at 30 a second, eye distance 86 px
+  point      what   moved (measured)        asked for             agreement
+  head       body   x 14.2 px, y  3.3 px    x 14.2 px, y  3.3 px    rms error 0.06 px, correlation x 1.00 y 1.00
+  chest      body   x 21.0 px, y  6.2 px    x 21.0 px, y  6.2 px    rms error 0.05 px, correlation x 1.00 y 1.00
+  shoulderL  body   x 16.5 px, y  6.4 px    x 16.5 px, y  6.5 px    rms error 0.07 px, correlation x 1.00 y 1.00
+  shoulderL  hair   x  3.1 px, y  3.6 px    x  3.3 px, y  3.8 px    rms error 0.09 px, correlation x 0.99 y 0.99
+  shoulderR  body   x 17.0 px, y  5.8 px    x 16.9 px, y  5.7 px    rms error 0.07 px, correlation x 1.00 y 1.00
+  shoulderR  hair   x  3.3 px, y  3.9 px    x  3.3 px, y  3.8 px    rms error 0.05 px, correlation x 1.00 y 1.00
+  tip        body   x 13.8 px, y  5.0 px    x 13.7 px, y  5.0 px    rms error 0.11 px, correlation x 1.00 y 1.00
+  tip        hair   x  5.6 px, y  6.5 px    x  5.9 px, y  6.9 px    rms error 0.09 px, correlation x 1.00 y 1.00
+  shoulders rise and fall over 5.9 px (0.068 eye distances); fastest 28 px a second, typical (median) 2.1
+  head carried by the body over 14.2 px sideways (0.16 eye distances) and 3.3 px up and down
+  bottom edge: the figure covers 566 px of the picture's bottom row when still, and between 100.2% and 101.2% of that while it moves (it would drop towards 0 if the figure lifted off the edge); furthest any part of the picture is moved: 14.7 px
+wrote body/body_paige.png
+cy frames 1012 x 3, mesh: true errors: []
+cy: 1012 frames at 30 a second, eye distance 99 px
+  point      what   moved (measured)        asked for             agreement
+  head       body   x 13.4 px, y  3.0 px    x 13.4 px, y  2.9 px    rms error 0.03 px, correlation x 1.00 y 1.00
+  chest      body   x 19.0 px, y  6.9 px    x 19.0 px, y  6.8 px    rms error 0.05 px, correlation x 1.00 y 1.00
+  shoulderL  body   x 15.3 px, y  6.6 px    x 15.1 px, y  6.8 px    rms error 0.17 px, correlation x 1.00 y 0.99
+  shoulderR  body   x 14.4 px, y  6.9 px    x 14.2 px, y  6.8 px    rms error 0.10 px, correlation x 1.00 y 1.00
+  shoulders rise and fall over 6.7 px (0.068 eye distances); fastest 45 px a second, typical (median) 3.0
+  head carried by the body over 13.4 px sideways (0.14 eye distances) and 3.0 px up and down
+  bottom edge: the figure covers 757 px of the picture's bottom row when still, and between 100.1% and 101.1% of that while it moves (it would drop towards 0 if the figure lifted off the edge); furthest any part of the picture is moved: 13.4 px
+wrote body/body_cy.png
+dee frames 584 x 3, mesh: true errors: []
+dee: 584 frames at 30 a second, eye distance 113 px
+  point      what   moved (measured)        asked for             agreement
+  head       body   x 20.9 px, y  3.9 px    x 20.9 px, y  3.9 px    rms error 0.03 px, correlation x 1.00 y 1.00
+  chest      body   x 23.8 px, y  7.7 px    x 23.7 px, y  7.6 px    rms error 0.11 px, correlation x 1.00 y 1.00
+  shoulderL  body   x 22.5 px, y  7.3 px    x 22.5 px, y  7.9 px    rms error 0.26 px, correlation x 1.00 y 1.00
+  shoulderR  body   x 22.8 px, y  7.3 px    x 22.7 px, y  7.4 px    rms error 0.10 px, correlation x 1.00 y 1.00
+  tip        body   x 21.4 px, y  4.3 px    x 21.7 px, y  4.5 px    rms error 0.11 px, correlation x 1.00 y 1.00
+  tip        hair   x  4.7 px, y  1.8 px    x  4.9 px, y  2.3 px    rms error 0.25 px, correlation x 0.98 y 0.94
+  gust       body   x 22.0 px, y  3.5 px    x 22.7 px, y  3.3 px    rms error 0.32 px, correlation x 1.00 y 0.99
+  gust       hair   x  3.6 px, y  1.5 px    x  4.5 px, y  2.0 px    rms error 0.44 px, correlation x 0.92 y 0.88
+  shoulders rise and fall over 6.9 px (0.061 eye distances); fastest 25 px a second, typical (median) 2.7
+  head carried by the body over 20.9 px sideways (0.18 eye distances) and 3.9 px up and down
+  bottom edge: the figure covers 700 px of the picture's bottom row when still, and between 99.7% and 102.3% of that while it moves (it would drop towards 0 if the figure lifted off the edge); furthest any part of the picture is moved: 19.4 px
+wrote body/body_dee.png
+sunny frames 484 x 3, mesh: true errors: []
+sunny: 484 frames at 30 a second, eye distance 61 px
+  point      what   moved (measured)        asked for             agreement
+  head       body   x 13.3 px, y  2.2 px    x 13.3 px, y  2.3 px    rms error 0.03 px, correlation x 1.00 y 1.00
+  chest      body   x 19.1 px, y  4.7 px    x 19.2 px, y  4.6 px    rms error 0.19 px, correlation x 1.00 y 0.99
+  shoulderL  body   x 15.6 px, y  4.2 px    x 15.6 px, y  4.4 px    rms error 0.13 px, correlation x 1.00 y 0.99
+  shoulderR  body   x 15.7 px, y  5.2 px    x 15.6 px, y  5.2 px    rms error 0.10 px, correlation x 1.00 y 1.00
+  tip        body   x 13.6 px, y  2.5 px    x 13.5 px, y  2.3 px    rms error 0.19 px, correlation x 1.00 y 0.99
+  tip        hair   x  3.8 px, y  3.8 px    x  5.2 px, y  4.6 px    rms error 0.18 px, correlation x 0.99 y 0.98
+  shoulders rise and fall over 4.6 px (0.076 eye distances); fastest 19 px a second, typical (median) 1.7
+  head carried by the body over 13.3 px sideways (0.22 eye distances) and 2.2 px up and down
+  bottom edge: the figure covers 409 px of the picture's bottom row when still, and between 100.0% and 101.2% of that while it moves (it would drop towards 0 if the figure lifted off the edge); furthest any part of the picture is moved: 12.3 px
+wrote body/body_sunny.png
+mel frames 264 x 3, mesh: true errors: []
+mel: 264 frames at 30 a second, eye distance 113 px
+  point      what   moved (measured)        asked for             agreement
+  head       body   x 11.0 px, y  3.2 px    x 11.1 px, y  3.1 px    rms error 0.05 px, correlation x 1.00 y 1.00
+  chest      body   x 14.1 px, y  6.7 px    x 14.1 px, y  6.8 px    rms error 0.04 px, correlation x 1.00 y 1.00
+  shoulderL  body   x 12.8 px, y  6.1 px    x 12.7 px, y  6.2 px    rms error 0.06 px, correlation x 1.00 y 1.00
+  shoulderR  body   x 11.8 px, y  8.2 px    x 11.7 px, y  8.3 px    rms error 0.04 px, correlation x 1.00 y 1.00
+  shoulders rise and fall over 6.8 px (0.060 eye distances); fastest 16 px a second, typical (median) 3.6
+  head carried by the body over 11.0 px sideways (0.10 eye distances) and 3.2 px up and down
+  bottom edge: the figure covers 759 px of the picture's bottom row when still, and between 100.0% and 101.1% of that while it moves (it would drop towards 0 if the figure lifted off the edge); furthest any part of the picture is moved: 16.8 px
+wrote body/body_mel.png
+ALL DONE

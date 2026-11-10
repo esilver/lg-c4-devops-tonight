@@ -9,7 +9,7 @@ const { chromium, devices } = require('playwright');
     p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
     await p.goto('file://' + __dirname + '/../demo/index.html');
     await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0, null, { timeout: 60000 }); await p.waitForTimeout(600);
-    await p.evaluate(() => { setPlaying(false); st.vt = 2.4; }); await p.waitForTimeout(300);
+    await p.evaluate(() => { setPlaying(false); st.vt = 1.9; }); await p.waitForTimeout(300);
     const wide = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     await p.screenshot({ path: `demo_${name}.png`, fullPage: true });
     const lenNew = await p.evaluate(() => total);

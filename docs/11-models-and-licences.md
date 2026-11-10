@@ -7,9 +7,9 @@
   If one resembles someone, that is coincidence.
 - **The places are synthetic** too: the studio, the data centre, the server aisle, the office and the satellite view.
 - **The news is invented.** "DevOps Tonight" is satire. The page says so under its controls and in its credits.
-- **The voices are synthetic.** Two open speech models read the lines. The first uses its stock voices. The second
-  copies each presenter's voice from a recording made by the first, so no real person's voice was recorded, sampled or
-  imitated at any point.
+- **The voices are synthetic.** Three open speech models have read the lines, one set of voices each. The first and
+  the third use their own stock voices. The second copies each presenter's voice from a recording made by the first,
+  so no real person's voice was recorded, sampled or imitated at any point.
 
 ## Licences were not checked during the session
 
@@ -39,6 +39,7 @@ fetches from PyTorch's download server. Nothing in `gen/models/` is committed.
 | Phonon 31M (English) | `gradium/phonon-31m-en` with voices from `gradium/phonon-voices`, through the `ptts` 0.7.0 package | The third set of voices (request 10) | Apache 2.0 for the model; the voices' own terms were not looked at |
 | Wav2Lip, ONNX export | `facefusion/models-3.0.0` (`wav2lip_96.onnx`) | The lip reference: its picture of the mouth is measured, never shown. Not part of the result as pixels | The original project allows research and personal use only, not commercial use |
 | 2DFAN4 face landmarks, ONNX export | `facefusion/models-3.0.0` (`2dfan4.onnx`) | Measuring lips in the reference and in the pose renders. Not part of the result | BSD for the original project; the export's own terms were not looked at |
+| BiSeNet face parser, ONNX export | `facefusion/models-3.0.0` (`bisenet_resnet_34.onnx`) | Labelling hair, skin, neck and cloth, from which the body, hair and wind maps are built (request 11). Only the maps are in the result | MIT for the original project (face-parsing.PyTorch); it was trained on CelebAMask-HQ, a dataset released for non-commercial research; the export's own terms were not looked at |
 | SQUIM quality estimators | torchaudio 2.6.0 (`SQUIM_SUBJECTIVE`, `SQUIM_OBJECTIVE`), with torchaudio's sample recording of a real speaker as the reference | Estimating the quality of both voice sets. Not part of the result | BSD for torchaudio; the weights' and the sample's own terms were not looked at |
 
 ## Downloaded but not part of the result
@@ -66,7 +67,7 @@ its bundled Python wheel were deliberately not downloaded, and neither were its 
 | Pillow | 13.0.0 |
 | Python for the speech model | 3.12, in `gen/venv3` (`gen/requirements-venv3.txt`) |
 | Python for the third speech model | 3.12 with `ptts` 0.7.0, in `gen/venv5` |
-| Python for the lip reference | 3.12 with onnxruntime 1.31.1, OpenCV, librosa 1.0.0, in `gen/venv6` |
+| Python for the lip reference, the face parser and the movement measurements | 3.12 with onnxruntime 1.31.1, OpenCV, librosa 1.0.0, matplotlib 3.11.2, in `gen/venv6` |
 | Python for the second speech model, the aligner and the estimators | 3.11.18 with PyTorch 2.6.0 (CPU), transformers 5.2.0, librosa 0.11.0, in `gen/venv4` (`gen/requirements-venv4.txt`) |
 | Node / Playwright | 22.23.4 / 1.63.0 |
 | ffmpeg | 6.1.1 |
@@ -87,3 +88,9 @@ The mouth curves in `src/speech.json` were derived by measuring pictures made by
 research and personal use. No Wav2Lip output appears in the page, but anyone who wants to use this page commercially
 should treat those curves as carrying that restriction, and can remove them: without the `lip` field of each line the
 page falls back to its own rule-based mouth.
+
+## A note on the body and hair maps
+
+The three maps in each presenter's entry of `assets.json` were built from the labels of a face parser trained on a
+research-only dataset. They are small weight maps, not pictures, but the same caution applies: for commercial use,
+make them another way. Without a presenter's `body` entry the page simply leaves the body and hair still.
