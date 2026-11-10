@@ -101,6 +101,7 @@ docs/                 the written account
 | [`docs/16-silent-video-and-one-pager.md`](docs/16-silent-video-and-one-pager.md) | A silent copy of the video, a clock fault in the renders, and the one-page explainer |
 | [`docs/17-live-avatar-poc.md`](docs/17-live-avatar-poc.md) | A proof of concept that talks back: Claude's reply and voice, lips guessed from the words and kept in step with the voice |
 | [`docs/18-own-voice-and-a-real-face.md`](docs/18-own-voice-and-a-real-face.md) | The avatar's own voice, run in the browser, with lips timed by the voice model; a face made from a photograph |
+| [`docs/19-rebuild-recipe.md`](docs/19-rebuild-recipe.md) | A second one-pager: the recipe as a skill file, for someone else's agent to rebuild the video from |
 
 ## Known limits
 

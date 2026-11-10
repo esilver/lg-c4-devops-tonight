@@ -1,0 +1,62 @@
+{
+ "title": "How to Rebuild the DevOps Tonight Presenters",
+ "band": ["The recipe: how to rebuild it", "Every model ran locally, on a CPU"],
+ "footer": ["DevOps Tonight", "The recipe", "10 November 2026"],
+ "facts": [
+  {"n": "0", "label": "video models", "source": "No video-generation model is involved"},
+  {"n": "1", "label": "still image for each presenter", "source": "a single generated photograph"},
+  {"n": "65", "label": "poses rendered from it", "source": "| **Total** | **65** |"},
+  {"n": "12", "label": "local models, each named below", "source": "Twelve models did the work"},
+  {"n": "8", "label": "steps, each with a check", "source": "Do the eight steps in order"},
+  {"n": "4", "label": "CPU cores did all of it; no GPU", "source": "run on four CPU cores"}
+ ],
+ "tags": {
+  "Read this first": "!",
+  "What you need": "kit",
+  "The models": "all",
+  "Order of work": "map",
+  "Tried and dropped": "no",
+  "What it cannot do": "lim",
+  "Licences": "©"
+ },
+ "figures": [
+  {"section": "read-this-first", "after": "top",
+   "items": [{"file": "hero.jpg", "alt": "Four frames of a news bulletin: a woman in a red jacket at a studio desk, a bearded reporter outside an office building, a woman in front of a satellite weather map, and a split screen with an anchor and an older guest on a video call."}],
+   "caption": "Four moments from the finished video: the anchor, the reporter outdoors, the cloud forecast and the interview."},
+  {"section": "step-2", "after": "Check", "class": "tiles four",
+   "items": [
+    {"file": "matte_photo.jpg", "alt": "The reporter's photograph: a man with curly ginger hair outside an office building.", "label": "photograph"},
+    {"file": "matte_alpha.jpg", "alt": "A white silhouette of the reporter on black.", "label": "matte"},
+    {"file": "matte_cut.jpg", "alt": "The reporter on a checkerboard, with a clean edge around his curls.", "label": "cut-out"},
+    {"file": "matte_plate.jpg", "alt": "The office building with a soft blur where the reporter stood.", "label": "plate"}],
+   "caption": "From the bulletin: the four pictures of this step for the reporter."},
+  {"section": "step-3", "after": "Check",
+   "items": [{"file": "poses.jpg", "alt": "Thirty-two small pictures of the same woman's face: head turned each way, nodded, tilted, brows up and down, eyes half closed and shut, eyes left, right and down, smiles, lips pressed, six jaw openings, and spread and rounded lips."}],
+   "caption": "From the bulletin: the contact sheet for the first anchor. It is the same face in every tile."},
+  {"section": "step-5", "after": "Do",
+   "items": [{"file": "w2l.jpg", "alt": "Six blurry pictures of a woman's face with different soft mouth shapes."}],
+   "caption": "From the bulletin: what the lip-sync network paints. It is small and soft, so only its measurements are used."},
+  {"section": "step-5", "after": "Check",
+   "items": [{"file": "phon.jpg", "alt": "Thirty close-ups of a mouth in sequence, each labelled with the sound being spoken, the word and how far the jaw is open."}],
+   "caption": "From the bulletin: the last check for the words \"Good evening, this is DevOps\". Each frame is labelled with the sound, the word and the opening drawn. The final frame, a p, is pressed shut."},
+  {"section": "step-6", "after": "Check", "class": "tiles two",
+   "items": [
+    {"file": "flow_turn.jpg", "alt": "Arrows over a woman's face, all pointing right, longest at the nose and fading at the hair and shoulders.", "label": "a turn of six degrees"},
+    {"file": "flow_nod.jpg", "alt": "Arrows over a woman's face, pointing down, longest at the nose and chin.", "label": "a nod of five degrees"}],
+   "caption": "From the bulletin: two of the six fields as arrows, drawn two and a half times their length."},
+  {"section": "step-7", "after": "Check", "class": "tiles two",
+   "items": [
+    {"file": "body_paige.jpg", "alt": "The anchor with her jacket tinted green and the lower part of her long hair tinted red.", "label": "green torso, red loose hair"},
+    {"file": "body_dee.jpg", "alt": "The reporter with his jacket and neck tinted green and his curls tinted purple.", "label": "purple: loose hair that the wind reaches"}],
+   "caption": "From the bulletin: the maps drawn over two presenters."},
+  {"section": "step-8", "after": "Do",
+   "items": [{"file": "chart.png", "alt": "A chart with six lanes over one spoken line: jaw opening, lip shape, voice pitch, brows, head nod and breath, with the words and their phonemes along the bottom."}],
+   "caption": "From the bulletin: what drives the face during one line. Jaw and lips come from the lip reference; brows and nods from the pitch and stress of the voice; the breath from the phrases."},
+  {"section": "step-8", "after": "Check",
+   "items": [{"file": "breath.jpg", "alt": "Three pictures of the anchor: before a breath, after it, and both overlaid in red and cyan with coloured fringes at the shoulders and hair."}],
+   "caption": "From the bulletin: one breath. Left, before it. Middle, the breath taken. Right, the two overlaid in red and cyan; the coloured fringes are what moved."},
+  {"section": "step-8", "after": "Check",
+   "items": [{"file": "motion.png", "alt": "Six small charts over fifteen seconds: mouth opening, breath, shoulders up, chest sideways, and loose hair sideways and down."}],
+   "caption": "From the bulletin: the body check as a chart. Mouth and breath are what the engine asks for. Shoulders, chest and hair are measured on the rendered frames with optical flow, in pixels of the 1024-pixel-wide picture."}
+ ]
+}

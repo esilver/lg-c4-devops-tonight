@@ -236,3 +236,9 @@ reports its own timing, and the cheapest accurate one was the model that voiced 
 browser. While that was built, a second agent took the requester's photograph through the pipeline as a sixth face.
 The voice's model could not be published inside the page, so the page takes it from the viewer once and keeps it.
 The repository turned out to be public, so the face and everything made from it stay out of it.
+
+## 15. A recipe for someone else's agent (10 November, published 23:57)
+
+Described in [19](19-rebuild-recipe.md). A reader asked for enough to rebuild the video. A third agent wrote the
+recipe as one skill file, with every step, model, measured setting and dropped attempt, and built a second
+one-pager from it. It was read in full and published as a private page.
