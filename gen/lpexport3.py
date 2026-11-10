@@ -13,14 +13,50 @@ hair maps (bodymap.py). What each part is:
   body    three maps on an 8-pixel grid: torso, free hair, wind (see bodymap.py), and the torso's middle, shoulder line and width.
   plus the cut-out, the background plate and a base frame that agrees with the neutral render.
 
-Run from gen/:  ./venv2/bin/python lpexport3.py            -> cast3.json (read by assets4.py)"""
+Run from gen/:  ./venv2/bin/python lpexport3.py            -> cast3.json (read by assets4.py)
+                ./venv2/bin/python lpexport3.py me --out cast_me.json     a sixth face, in a file of its own"""
 import sys, json, os, io, base64, math
 import cv2, numpy as np
 from PIL import Image
 W, H = 1024, 576; LP = "lp4"
 GAIN = dict(paige=1.05, cy=1.0, dee=1.12, sunny=1.05, mel=0.95)
+GAIN.update(me=1.25)                                         # a face from a photograph; judged on the live avatar page (lipcal_photo.py, avatar/faces/check.js)
 EXTRA = dict(sunny=dict(wxScale=1.08))
 ROWS = ["e1", "e2", "w1", "w2", "sg"]
+OUTLINE = {"me"}                                             # the jaw is seen against the backdrop: the mouth region stops short of the cut-out's outline (see export)
+PLAIN = {"me"}                                               # photographed against a plain backdrop: the plate is that backdrop, continued smoothly (plain_plate)
+def plain_plate(bgr, alpha, reach=12):
+    """The plate for a face photographed against a plain backdrop. Carrying the surroundings inwards (what the other
+    plates do) leaves a faint figure in a plain backdrop: streaks where stray hairs and the soft shadow next to the
+    outline are dragged in, and a seam down the middle where the lighter side meets the darker one. Here the hole
+    (the person and `reach` pixels around, which takes the stray hairs with it) is filled by the smoothest surface
+    that meets the real backdrop all round it: every filled pixel is the average of its four neighbours (worked out
+    from a coarse copy of the picture to the full one). The backdrop's own fine noise, from a patch of real backdrop,
+    is laid over the filled part so that it is not flatter than the rest."""
+    hole = cv2.dilate((alpha > 6).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * reach + 1, 2 * reach + 1))) > 0
+    pyr = [(bgr.astype(np.float32), hole)]
+    while min(pyr[-1][0].shape[:2]) > 24:                                                           # coarser copies: a pixel is the mean of what is known in its 2x2 block
+        im, h = pyr[-1]; H2, W2 = (im.shape[0] + 1) // 2, (im.shape[1] + 1) // 2; k = (~h).astype(np.float32)
+        den = cv2.resize(k, (W2, H2), interpolation=cv2.INTER_AREA); num = cv2.resize(im * k[..., None], (W2, H2), interpolation=cv2.INTER_AREA)
+        pyr.append((num / np.maximum(den, 1e-6)[..., None], den < 1e-6))
+    ker = np.array([[0, 0.25, 0], [0.25, 0, 0.25], [0, 0.25, 0]], np.float32); cur = None
+    for im, h in reversed(pyr):
+        im = im.copy(); im[h] = cv2.resize(cur, (im.shape[1], im.shape[0]), interpolation=cv2.INTER_LINEAR)[h] if cur is not None else im[~h].mean(axis=0)
+        for _ in range(300): im[h] = cv2.filter2D(im, -1, ker, borderType=cv2.BORDER_REFLECT)[h]
+        cur = im
+    best = None                                                                                    # the flattest window of real backdrop, for its noise
+    for y in range(0, bgr.shape[0] - 96, 32):
+        for x in range(0, bgr.shape[1] - 96, 32):
+            if hole[y:y + 96, x:x + 96].any(): continue
+            q = bgr[y:y + 96, x:x + 96].astype(np.float32); v = float(np.abs(q - q.mean(axis=(0, 1))).max())
+            if best is None or v < best[0]: best = (v, q - cv2.GaussianBlur(q, (0, 0), 3))
+    if best is not None:
+        rng = np.random.default_rng(11); noise = np.zeros_like(cur)
+        for y in range(0, cur.shape[0], 96):
+            for x in range(0, cur.shape[1], 96):
+                q = best[1] if rng.random() < 0.5 else best[1][::-1]; q = q if rng.random() < 0.5 else q[:, ::-1]; hh, ww = min(96, cur.shape[0] - y), min(96, cur.shape[1] - x); noise[y:y + hh, x:x + ww] = q[:hh, :ww]
+        cur[hole] += noise[hole]
+    return np.clip(cur, 0, 255)
 def uri(im, fmt="WEBP", **kw):
     b = io.BytesIO(); im.save(b, fmt, **kw); return f"data:image/{fmt.lower()};base64," + base64.b64encode(b.getvalue()).decode()
 def export(key, idx):
@@ -51,6 +87,12 @@ def export(key, idx):
         b = cv2.dilate(b, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * int(2 * sg) + 1, 2 * int(2 * sg) + 1)))
         return np.clip(cv2.GaussianBlur(b.astype(np.float32), (0, 0), sg) * valid, 0, 1)
     Mm = softmask(sum(mouth.values(), []), (yy > ey + 0.34 * iod) & ell(1.25, 1.35, 1.2))
+    if key in OUTLINE:
+        # On this face the jaw and one side of the neck are seen against the backdrop, and the mouth region reaches across
+        # that outline. The cut-out's edge is the photograph's, but a re-posed face is a pixel or two narrower or wider
+        # there, so with the mouth shut a thin line of the render's backdrop stood inside the edge, and went as the mouth
+        # opened. The region now fades out between 6 and 1.5 pixels inside the outline: the outline is always the photograph's.
+        Mm = Mm * np.clip((cv2.distanceTransform((alpha > 127).astype(np.uint8), cv2.DIST_L2, 5) - 1.5) / 4.5, 0, 1)
     Me = softmask(list(eyes.values()), ell(0.05, 1.2, 0.25), grow=0.06, feather=0.035)          # lids and eyeballs only: the brows are moved, not swapped
     U = np.maximum(Mm, Me)[..., None]; base = frame * (1 - U) + n * U                              # the photo now agrees with the renders
     Image.fromarray(base.round().astype(np.uint8)).save(f"{d}/frame_lp3.png")
@@ -100,6 +142,7 @@ def export(key, idx):
     plate = cv2.inpaint(bgr, mask, 7, cv2.INPAINT_TELEA).astype(np.float32); depth = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
     w1 = np.clip((depth - 2) / 10, 0, 1)[..., None]; w2 = np.clip((depth - 14) / 26, 0, 1)[..., None]
     plate = plate * (1 - w1) + cv2.GaussianBlur(plate, (0, 0), 4) * w1; plate = plate * (1 - w2) + cv2.GaussianBlur(plate, (0, 0), 12) * w2
+    if key in PLAIN: plate = plain_plate(cv2.cvtColor(frame.round().astype(np.uint8), cv2.COLOR_RGB2BGR), alpha)
     bg = Image.fromarray(cv2.cvtColor(plate.round().astype(np.uint8), cv2.COLOR_BGR2RGB)); bg.save(f"{d}/plate3.jpg", quality=90)      # kept to look at
     ent = dict(bg=uri(bg, "JPEG", quality=86), fg=uri(fg, quality=88, method=6), seed=round(1.0 + idx * 1.7, 2), gain=GAIN[key],
                face=dict(cx=round(ex, 1), cy=round(ey + 0.45 * iod, 1), iod=round(iod, 1)), mouth=m, eyes=e,
@@ -110,7 +153,12 @@ def export(key, idx):
     print(f"{key}: mouth {m['w']}x{m['h']} {kb(m)} kB, eyes {e['w']}x{e['h']} {kb(e)} kB, motion grid {cols}x{rows} step {step} {sum(len(q[1]) for q in enc) // 1024} kB; right={right} {nose(fl[right])[0]:+.1f} px, down={down} {nose(fl[down])[1]:+.1f} px, brows up {browpx[0]:+.1f} px / down {browpx[1]:+.1f} px", flush=True)
     return ent
 if __name__ == "__main__":
-    keys = ["paige", "cy", "dee", "sunny", "mel"]; out = json.load(open("cast3.json")) if os.path.exists("cast3.json") else {}
+    # A face that is not one of the five (one made from a photograph, prep_photo.py) is named on the command line and
+    # written to a file of its own, so cast3.json and the bulletin are left alone:  lpexport3.py me --out cast_me.json
+    args = sys.argv[1:]; dest = args.pop(args.index("--out") + 1) if "--out" in args else "cast3.json"; args = [a for a in args if a != "--out"]
+    five = ["paige", "cy", "dee", "sunny", "mel"]; keys = five + [a for a in args if a not in five]
+    assert dest != "cast3.json" or keys == five, "a face outside the five needs --out <file>"
+    out = json.load(open(dest)) if os.path.exists(dest) else {}
     for i, key in enumerate(keys):
-        if (key in sys.argv[1:] or len(sys.argv) == 1) and os.path.exists(f"work/{key}/{LP}/d_browdn.png"): out[key] = export(key, i)
-    json.dump({k: out[k] for k in keys if k in out}, open("cast3.json", "w"))
+        if (key in args or not args) and os.path.exists(f"work/{key}/{LP}/d_browdn.png"): out[key] = export(key, i)
+    json.dump({k: out[k] for k in keys if k in out}, open(dest, "w"))

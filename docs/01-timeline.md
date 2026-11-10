@@ -228,3 +228,11 @@ Described in [17](17-live-avatar-poc.md). After the post went up the requester s
 themselves, and asked whether what exists could be the base of a quick live proof of concept. The artifact viewer
 offers a call to Claude, a voice and dictation, so the page only had to join those to the engine: a guess at the
 mouth from the spelling of the reply, and a clock that keeps it in step with the voice.
+
+## 14. Its own voice, exact lips, and a face from a photograph (10 November, published 23:31)
+
+Described in [18](18-own-voice-and-a-real-face.md). Asked how to make the lips better, the answer was a voice that
+reports its own timing, and the cheapest accurate one was the model that voiced the first recordings, run in the
+browser. While that was built, a second agent took the requester's photograph through the pipeline as a sixth face.
+The voice's model could not be published inside the page, so the page takes it from the viewer once and keeps it.
+The repository turned out to be public, so the face and everything made from it stay out of it.

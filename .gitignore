@@ -15,3 +15,17 @@ gen/venv4
 gen/venv5
 gen/venv6
 onepager/slices/
+# the avatar's own voice is other people's files (110 MB): avatar/get_voice.py fetches them; only the worker is ours
+avatar/voice/*
+!avatar/voice/worker.js
+# a face made from a real person's photograph belongs to that person and is never committed: not the photograph, not
+# the poses and maps made from it, not a page, screenshot or video that shows it
+gen/work/me/
+gen/cast_me.json
+avatar/faces/*.json
+avatar/faces/preview_*.html
+avatar/faces/check/
+avatar/index.*.html
+avatar/test_*.png
+demo/avatar-*
+tests/output/voice/

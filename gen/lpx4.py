@@ -19,6 +19,7 @@ JN = [0, 4, 8, 12, 16, 21, 26, 32, 38, 45, 52, 60]          # jaw values along t
 JS = [0, 5, 10, 16, 22, 30, 38, 48]                          # jaw values along each shaped row
 SMILE = 0.38                                                 # the broad smile, measured from the photograph's expression
 REST = dict(paige=dict(smile=-0.10, woo=2), cy=dict(smile=-0.20, woo=3), dee=dict(smile=-0.20, woo=3), sunny=dict(smile=-0.20, woo=3), mel=dict(smile=-0.25, woo=4))
+REST.update(me=dict(smile=-0.15, woo=3))                     # a face from a photograph (prep_photo.py); chosen from relax_grid_photo.py's sheet
 JAWK = dict(mel=1.5)                                         # model jaw units per page jaw unit
 for key in sys.argv[1:]:
     d = f"work/{key}"; meta = json.load(open(f"{d}/meta.json")); out = f"{d}/lp4"; os.makedirs(out, exist_ok=True)

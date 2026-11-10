@@ -55,7 +55,9 @@ is eased in over a seventh of a second, and both are also started as soon as the
 
 Not checked, because it cannot be from here: the real reply, either real voice, dictation, and whether the lips
 look right against the sound. The agent cannot watch or listen, and the viewer's capabilities exist only inside the
-viewer. `avatar/test_1.png` is one frame from the test.
+viewer.
+
+The lips are no longer a guess where the avatar has its own voice: see [18](18-own-voice-and-a-real-face.md).
 
 ## What it is not
 

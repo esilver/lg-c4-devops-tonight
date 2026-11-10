@@ -40,6 +40,7 @@ fetches from PyTorch's download server. Nothing in `gen/models/` is committed.
 | Wav2Lip, ONNX export | `facefusion/models-3.0.0` (`wav2lip_96.onnx`) | The lip reference: its picture of the mouth is measured, never shown. Not part of the result as pixels | The original project allows research and personal use only, not commercial use |
 | 2DFAN4 face landmarks, ONNX export | `facefusion/models-3.0.0` (`2dfan4.onnx`) | Measuring lips in the reference and in the pose renders. Not part of the result | BSD for the original project; the export's own terms were not looked at |
 | BiSeNet face parser, ONNX export | `facefusion/models-3.0.0` (`bisenet_resnet_34.onnx`) | Labelling hair, skin, neck and cloth, from which the body, hair and wind maps are built (request 11). Only the maps are in the result | MIT for the original project (face-parsing.PyTorch); it was trained on CelebAMask-HQ, a dataset released for non-commercial research; the export's own terms were not looked at |
+| Kokoro-82M v1.0, ONNX with durations, 8-bit | `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped` (`onnx/model_quantized.onnx`, `voices/*.bin`) | The live avatar's own voice and the time of every sound (docs/18). Fetched by `avatar/get_voice.py`, not committed | Apache 2.0, as its model card states |
 | SQUIM quality estimators | torchaudio 2.6.0 (`SQUIM_SUBJECTIVE`, `SQUIM_OBJECTIVE`), with torchaudio's sample recording of a real speaker as the reference | Estimating the quality of both voice sets. Not part of the result | BSD for torchaudio; the weights' and the sample's own terms were not looked at |
 
 ## Downloaded but not part of the result
@@ -70,11 +71,12 @@ its bundled Python wheel were deliberately not downloaded, and neither were its 
 | Python for the lip reference, the face parser and the movement measurements | 3.12 with onnxruntime 1.31.1, OpenCV, librosa 1.0.0, matplotlib 3.11.2, in `gen/venv6` |
 | Python for the second speech model, the aligner and the estimators | 3.11.18 with PyTorch 2.6.0 (CPU), transformers 5.2.0, librosa 0.11.0, in `gen/venv4` (`gen/requirements-venv4.txt`) |
 | Node / Playwright | 22.23.4 / 1.63.0 |
+| In the browser, for the live avatar's own voice (docs/18) | onnxruntime-web 1.31.1 (MIT, per its package) and phonemizer 1.2.1 (Apache 2.0 per its package; it wraps eSpeak NG, which is GPL-3.0 as recalled, unverified). Fetched by `avatar/get_voice.py` or loaded from a CDN, not committed |
 | ffmpeg | 6.1.1 |
 
 Full lists: `gen/requirements-venv.txt` and `gen/requirements-venv2.txt`.
 
-The published pages themselves depend on none of this. They need only a browser with WebGL. The demo page also asks
+The published pages themselves depend on none of this, apart from the live avatar's own voice. They need only a browser with WebGL. The demo page also asks
 Google Fonts for its interface typeface and falls back to system fonts without it.
 
 ## This repository's own code

@@ -40,21 +40,27 @@
   button:disabled { opacity: .5; cursor: default; }
   .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; color: var(--muted); font-size: 14px; }
   .row label { display: inline-flex; gap: 8px; align-items: center; }
+  .row label[hidden] { display: none; }
   #log { display: grid; gap: 8px; margin: 0; padding: 12px; list-style: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; max-height: 260px; overflow-y: auto; font-size: 15px; }
   #log:empty { display: none; }
   #log li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
   #log span { font: 500 12px var(--data); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
   .note { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 76ch; }
+  .note a { color: var(--ink); }
+  #add { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
+  #add[hidden] { display: none; }
+  .pick { display: inline-flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; color: var(--muted); }
+  .pick input { font: inherit; color: var(--ink); max-width: 100%; }
 </style>
 </head>
 <body>
 <main>
   <header>
     <h1>Live Avatar Demo</h1>
-    <p>Say or type something and the presenter answers out loud. The reply comes from Claude, the face is one photograph, and the lips are worked out from the words as they are spoken.</p>
+    <p>Say or type something and the avatar answers out loud. The reply comes from Claude, the face is one photograph, and the lips are timed by the model that makes the voice.</p>
   </header>
   <div class="stage">
-    <canvas id="screen" width="768" height="576" aria-label="The presenter"></canvas>
+    <canvas id="screen" width="768" height="576" aria-label="The avatar"></canvas>
     <span id="state" data-s="idle" aria-live="polite">Loading</span>
   </div>
   <p id="cap" aria-live="polite"></p>
@@ -65,16 +71,22 @@
     <button id="stop" type="button" hidden>Stop</button>
   </form>
   <div class="row">
-    <label for="voice" id="voiceRow" hidden>Voice <select id="voice"><option value="airy">Airy</option><option value="buttery">Buttery</option><option value="glassy">Glassy</option><option value="rounded">Rounded</option></select></label>
+    <label for="voice" id="voiceRow" hidden>Voice <select id="voice"></select></label>
     <span id="how"></span>
   </div>
+  <div id="add" hidden>
+    <p class="note" id="addWhy"></p>
+    <label class="pick">Add the files <input id="files" type="file" multiple accept=".onnx,.bin,.wasm"></label>
+  </div>
   <ol id="log" aria-label="Conversation"></ol>
-  <p class="note">A proof of concept. The presenter is an AI-generated still, not a real person, and she is an AI. Her lips are guessed from the spelling of each word and kept in step with the voice as it plays, so they are plausible, not exact. Nothing you say is kept by this page.</p>
+  <p class="note" id="note"></p>
 </main>
 <script>
 'use strict';
-// Plain JavaScript, no libraries. The bulletin's own engine (below, unchanged) draws the presenter. This page adds the
-// live part: a reply from Claude, a voice, a guess at the mouth from the words, and a clock that keeps the two together.
+// The bulletin's own engine (below, unchanged) draws the face. This page adds the live part: a reply from Claude, a
+// voice, and a clock that keeps the mouth with the voice. The voice is the avatar's own where it can be: a speech model
+// run on this device by voice/worker.js, which reports when every sound happens, so the lips are exact. Where that
+// cannot start, a voice of Claude's or the browser's speaks instead and the mouth is estimated from the spelling.
 const SW = 1024, SH = 576, scr = document.getElementById('screen'), c = scr.getContext('2d');
 const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 let switchedAt = -10;
@@ -793,10 +805,14 @@ function chNews(t) {
 const WHO = Object.keys(ASSETS.cast)[0], $ = id => document.getElementById(id);
 const T0 = performance.now(), wall = () => performance.now() / 1000, clock = () => (performance.now() - T0) / 1000;      // the show's clock starts when the page does
 const PRE = 0.1, PACE = 13;                    // seconds of a line before its first sound; letters a second the voice is assumed to speak
-const PERSONA = `You are the presenter on screen in a live avatar demo: an AI avatar, friendly and quick. You are speaking out loud, so answer in one or two short sentences of plain spoken English. No lists, no markdown, no emoji, no stage directions. Write numbers as words. If asked, say plainly that you are an AI avatar made from one generated photograph.`;
+// Real speech is quicker than the estimate, and the engine opens the jaw less for a sound that is over sooner: with the
+// voice's own times the jaw reached 0.57 at the 90th percentile against 0.66 with estimated ones. This brings it back.
+const OPEN = 1.16;
+const FACE = {"voice": "af_heart", "persona": "You are an AI, friendly and quick. Your face is one AI-generated photograph, not a real person; if asked, say so plainly.", "note": "A proof of concept. The face is an AI-generated still, not a real person, and the one answering is an AI. Nothing you say is kept by this page."};          // whose face this is, what to say about it, and its usual voice (build.py fills it in)
+const PERSONA = `You are the avatar on screen in a live avatar demo. ${FACE.persona} You are speaking out loud, so answer in one or two short sentences of plain spoken English. No lists, no markdown, no emoji, no stage directions. Write numbers as words.`;
 
-/* ── from a sentence to the sounds a mouth makes ──
-   A rough guess at English pronunciation from spelling. It does not need to get the word right, only the mouth: where
+/* ── from a sentence to the sounds a mouth makes, when the voice does not say ──
+   Only for a borrowed voice (Claude's, the browser's). A rough guess at English pronunciation from spelling. It does not need to get the word right, only the mouth: where
    the lips meet (p, b, m), where they round (w, oo, oh), where the jaw drops (ah). Symbols are the engine's own. */
 const DIGIT = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 const PAIR = { th: ['θ'], sh: ['ʃ'], ch: ['ʧ'], ph: ['f'], wh: ['w'], ck: ['k'], ng: ['ŋ'], qu: ['k', 'w'], gh: [], kn: ['n'], wr: ['ɹ'],
@@ -857,8 +873,12 @@ function plan(text) {
 
 /* ── the engine's timelines, kept going for as long as the page is open ── */
 const live = { state: 'loading', n: 0, beat: null, idle: null, stretch: 1, breath: [], until: 0, think: 0, turn: null, cur: -1, seq: 0, history: [] };
-const sync = { plan: 0, at: 0, k: 1, on: false, line: -1, started: 0, heard: 0 };          // planned time `plan` was reached at wall time `at`; the voice runs `k` times slower than planned
-const planned = () => sync.on ? sync.plan + (wall() - sync.at) / sync.k : 0;
+// Where the line is. With the avatar's own voice: the audio clock itself, less the time sound takes to leave the device
+// (`audio` is when the line's first sample plays). With a borrowed voice: planned time `plan` was reached at wall time
+// `at`, and the voice runs `k` times slower than planned.
+const sync = { plan: 0, at: 0, k: 1, on: false, line: -1, started: 0, heard: 0, audio: null };
+let actx = null; const lag = () => actx ? actx.outputLatency || actx.baseLatency || 0 : 0;
+const planned = () => !sync.on ? 0 : sync.audio != null ? actx.currentTime - lag() - sync.audio : sync.plan + (wall() - sync.at) / sync.k;
 // Breathing: the engine expects a finished timeline. Here it is finished again whenever something is added: quiet
 // breaths up to each breath taken for speech, and on for twenty minutes after the last one.
 function breathe() {
@@ -872,18 +892,20 @@ function breathe() {
 }
 function rest(ts) { live.idle = { who: WHO, start: ts, dur: 1e9, mo: { back: [] } }; live.beat = null; sync.on = false; }
 // The voice has reached line i of the reply being spoken (each line is begun once, whichever signal reports it first).
-function reach(i) { const L = live.turn; if (!L || !L[i] || live.cur === i) return; live.cur = i; finish(); begin(L[i], clock()); }
-// A line begins: its audio has just started. The engine builds jaw, lips, nods, brows and posture for it.
+function reach(i, ts) { const L = live.turn; if (!L || !L[i] || live.cur === i) return; live.cur = i; finish(); begin(L[i], ts == null ? clock() : ts); }
+// A line begins: its audio starts at ts. The engine builds jaw, lips, nods, brows and posture for it, from the sounds
+// and times the voice reported (line.sp) or, for a borrowed voice, from the guess above.
 function begin(line, ts) {
-  const sp = plan(line.text); if (!sp) return;
+  const sp = line.sp || plan(line.text); if (!sp) return;
   const b = { who: WHO, start: ts - PRE, lead: PRE, ai: live.n++, sp, tail: 0.5 };
-  if (line.first) b.sm = [[WHO, 0, 0.22, 0.55]];                                                                // she starts on a smile
+  if (line.first) b.sm = [[WHO, 0, 0.22, 0.55]];                                                                // a reply starts on a smile
   BREATH[WHO] = live.breath; buildSpeech(b); live.breath = BREATH[WHO]; breathe();
-  live.beat = b; sync.plan = 0; sync.at = wall(); sync.k = live.stretch; sync.on = true; sync.started = wall(); sync.heard = 0;
+  if (line.sp) for (let i = 0; i < b.J.length; i++) b.J[i] *= OPEN;
+  live.beat = b; sync.plan = 0; sync.at = wall(); sync.k = line.sp ? 1 : live.stretch; sync.on = true; sync.started = wall(); sync.heard = 0; sync.audio = line.when == null ? null : line.when;
 }
 // A line ends: how long it really took against the plan tells how fast this voice speaks, for the lines that follow.
 function finish() {
-  const b = live.beat; if (!b || !sync.on) return;
+  const b = live.beat; if (!b || !sync.on || sync.audio != null) return;                                      // nothing to learn from a voice that says its own times
   const took = sync.heard > 0.5 ? sync.heard : wall() - sync.started, meant = b.t1 - PRE;
   if (meant > 0.8 && took > 0.5) live.stretch = clamp(0.5 * live.stretch + 0.5 * took / meant, 0.6, 1.7);
 }
@@ -899,12 +921,136 @@ faceAt = (id, b, bt, ts, still) => {
 };
 bodyAt = (id, q, ts) => { const o = body0(id, q, ts); ease1.lift += (o.lift - ease1.lift) * ease1.k; o.lift = ease1.lift; return o; };
 
-/* ── a voice: Claude's where the page is given one, the browser's own otherwise, none at all in the last resort ── */
-const io = { sample: null, tts: null, dictation: null, voice: 'speechSynthesis' in window ? 'browser' : 'none' };
-function speak(lines) {
-  // resolves when every line has been heard (or stopped); calls begin() as each line starts
-  if (io.voice === 'claude') return io.tts.speak(lines.map((l, i) => ({ text: l.text, id: 'l' + i })), { voice: $('voice').value });
-  if (io.voice === 'browser') return new Promise(done => {
+/* ── the avatar's own voice ──
+   Kokoro, a speech model of 82 million parameters, run on this device by voice/worker.js. For every line it returns the
+   audio and the sounds in it with their times, so nothing about the mouth is guessed. It takes a while to arrive
+   (92 MB, once) and, on a slow device, longer to make a line than to say it; until it is ready, or if it cannot start
+   in this view, a borrowed voice speaks. */
+const kk = { state: 'off', pool: [], rtf: 1.2, cps: 15, step: '', got: 0, of: 0, error: '', wait: {}, id: 0, voices: [], threads: 1, need: [], files: { model: null, wasm: null, voices: {} }, kept: null, from: '' };
+const GAP = 0.1, SLACK = 0.35, HOLD = 4;       // seconds between two lines; how much longer a pause may get before the start is held back; the longest it is held
+// Where the voice's parts come from. Run from a disk or a server of one's own, everything is in the folder voice/ beside
+// the page. A page published as a Claude artifact cannot carry the model, so there the two libraries come from a CDN
+// and the model and voices are files the viewer adds once; they are kept in this browser (IndexedDB) for the next visit.
+const HF = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped/resolve/dd4401a9add81ac692d20e240d22ec9dda82cc29/';
+const store = {
+  open: () => new Promise((ok, no) => { try { const r = indexedDB.open('avatar-voice', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); } catch (e) { no(e); } }),
+  all: async () => { const db = await store.open(); return new Promise((ok, no) => { const out = {}, c = db.transaction('f').objectStore('f').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { out[cur.key] = cur.value; cur.continue(); } else ok(out); }; c.onerror = () => no(c.error); }); },
+  put: async (k, v) => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'); t.objectStore('f').put(v, k); t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
+};
+// a file the viewer chose, by what its name ends in: the model, the runtime's WebAssembly, or a voice
+function take(name, buf) {
+  const f = kk.files; name = name.replace(/^.*[\\/]/, '');
+  if (/\.onnx$/i.test(name)) f.model = buf; else if (/\.wasm$/i.test(name)) f.wasm = buf; else if (/\.bin$/i.test(name) && buf.byteLength % 1024 === 0 && buf.byteLength < 4e6) f.voices[name.replace(/( \(\d+\))?\.bin$/i, '')] = buf; else return false;
+  return true;
+}
+function ownVoice() {
+  const base = new URL('voice/', document.baseURI).href; kk.state = 'loading'; note();
+  const lost = why => { kk.state = 'failed'; kk.error = why; voiceList(); note(); };
+  // One worker makes one line at a time on one core (more needs a kind of page this is not). So where the device has
+  // the cores and the memory, a second and a third are started, each handed the model the one before it used.
+  const mobile = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const want = clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, mobile ? 2 : 3, navigator.deviceMemory ? Math.floor(navigator.deviceMemory / 2) : 3), 1, 3);
+  const init = (w, model) => { const f = kk.files, m = { type: 'init', base, voice: FACE.voice, voices: {} }, tr = [];
+    if (model) { m.model = model; tr.push(model.buffer); } if (f.wasm) m.wasm = f.wasm.slice(0);
+    for (const [k, v] of Object.entries(f.voices)) m.voices[k] = new Float32Array(v.slice(0));
+    w.postMessage(m, tr); };
+  const mine = () => { const b = kk.files.model; kk.files.model = null; return b ? new Uint8Array(b) : null; };      // the viewer's model file goes to the first worker, which passes it on
+  const wire = (w, first, model) => { let up = false; if (first) kk.first = w;
+    w.onmessage = e => { const m = e.data; if (first) kk.alive = true;
+      if (m.type === 'progress') { if (first) { kk.step = m.step; if (m.of) { kk.got = m.got; kk.of = m.of; } note(); } }
+      else if (m.type === 'need') { if (first) { kk.state = 'needs'; kk.need = m.what; note(); } }
+      else if (m.type === 'ready') { up = true; kk.pool.push({ w, load: 0 });
+        if (first) { kk.state = 'ready'; kk.rtf = m.rtf; kk.threads = m.threads; kk.voices = m.voices; kk.from = m.from; spread(); voiceList(); }
+        if (kk.pool.length < want && kk.state === 'ready') start(m.model); note(); }
+      else if (m.id != null && kk.wait[m.id]) { const f = kk.wait[m.id]; delete kk.wait[m.id]; f(m); }
+      else if (m.type === 'error' && m.id == null && first) lost(m.message); };                        // a later worker that fails is simply not used
+    w.onerror = e => { if (e && e.preventDefault) e.preventDefault(); if (!first) { if (up) lost('a voice worker stopped'); return; } if (kk.alive || kk.blob) lost((e && e.message) || 'the worker stopped'); else viaBlob(); };
+    init(w, model); };
+  const start = model => { try { wire(kk.blob ? new Worker(kk.blob, { type: 'module' }) : new Worker(base + 'worker.js', { type: 'module' }), false, model); } catch (e) {} };
+  // Some views only allow a worker made from a blob. The worker loads everything else by full address, so it works either way.
+  const viaBlob = () => { kk.blob = 'pending'; fetch(base + 'worker.js').then(r => { if (!r.ok) throw new Error('worker.js: HTTP ' + r.status); return r.text(); })
+    .then(src => { kk.blob = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); wire(new Worker(kk.blob, { type: 'module' }), true, mine()); }).catch(e => lost(String(e && e.message || e))); };
+  // Files the viewer adds: kept for next time, then either the first worker starts again with them or a new voice is passed round.
+  kk.add = async list => {
+    const fresh = [];
+    for (const file of list) { const buf = await file.arrayBuffer(); if (!take(file.name, buf)) continue; fresh.push(file.name); try { await store.put(file.name.replace(/^.*[\\/]/, ''), buf); kk.kept = true; } catch (e) { kk.kept = false; } }
+    if (!fresh.length) return;
+    if (kk.state === 'needs' || kk.state === 'failed') { kk.state = 'loading'; kk.step = 'starting'; note(); init(kk.first, mine()); }
+    else if (kk.state === 'ready') { spread(); voiceList(); note(); }
+  };
+  // a voice added while the model was starting, or after: every worker gets it
+  const spread = () => { for (const [k, v] of Object.entries(kk.files.voices)) if (!kk.voices.includes(k)) { kk.voices.push(k); for (const p of kk.pool) p.w.postMessage({ type: 'voice', name: k, data: new Float32Array(v.slice(0)) }); } };
+  store.all().then(f => { for (const [k, v] of Object.entries(f)) take(k, v); kk.kept = true; }, () => { kk.kept = false; })
+    .then(() => { try { wire(new Worker(base + 'worker.js', { type: 'module' }), true, mine()); } catch (e) { viaBlob(); } });
+}
+// Sound may only start inside a tap. iPhones also mute a page's sound with the ringer switch unless the page asks for a
+// playback session or keeps a silent <audio> element going (docs/14); neither does anything elsewhere.
+function sound() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  try {
+    if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; actx = new AC(); }
+    if (actx.state !== 'running') actx.resume().catch(() => {});
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (ios && !sound.keep) {
+      const n = 22050, b = new Uint8Array(44 + n), v = new DataView(b.buffer), put = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };
+      put(0, 'RIFF'); v.setUint32(4, 36 + n, true); put(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 22050, true); v.setUint32(28, 44100, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); put(36, 'data'); v.setUint32(40, n, true);
+      const el = sound.keep = document.createElement('audio'); el.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' })); el.loop = true; el.setAttribute('playsinline', '');
+      const p = el.play(); if (p && p.catch) p.catch(() => {});
+    }
+    const s = actx.createBufferSource(); s.buffer = actx.createBuffer(1, 1, actx.sampleRate); s.connect(actx.destination); s.start(0);
+  } catch (e) {}
+}
+// Speaks a reply with the avatar's own voice. Every line is asked for at once and made in order; each is scheduled on
+// the audio clock as it arrives, and frame() starts its mouth when that moment comes. Resolves when the last has played.
+function speakOwn(lines, prep) {
+  return new Promise(done => {
+    const my = live.seq, voice = $('voice').value.slice(2);
+    const q = live.q = { lines, i: 0, end: 0, srcs: [], on: false, prep: 0, done: () => { if (q.over) return; q.over = true; if (live.q === q) live.q = null; done(); } };
+    const est = l => l.secs || l.text.length / kk.cps, alive = () => my === live.seq && live.turn === lines && !q.over;
+    const ready = () => { if (!q.prep) { q.prep = clock(); prep(); } };
+    const got = (i, m) => {
+      if (!alive()) return; const l = lines[i]; l.made = true;
+      if (m.type !== 'said' || m.empty) { l.skip = true; if (m.type === 'error') { kk.state = 'failed'; kk.error = m.message; voiceList(); note(); } }
+      else { kk.rtf = clamp(0.5 * kk.rtf + 0.5 * m.took / m.secs, 0.05, 20); kk.cps = clamp(0.7 * kk.cps + 0.3 * l.text.length / m.secs, 8, 25); l.sp = m.sp; l.secs = m.secs; l.buf = actx.createBuffer(1, m.audio.length, 24000); l.buf.getChannelData(0).set(m.audio); }
+      pump();
+    };
+    const pump = () => {
+      while (q.i < lines.length && lines[q.i].made) {
+        const l = lines[q.i], now = actx.currentTime; let when;
+        if (l.skip) { q.i++; continue; }
+        if (!q.on) {
+          // The first line could start now. If this device makes speech slower than it is spoken, starting now would leave
+          // long silences between lines, so the start waits until the lines still being made can keep up, to within a pause.
+          let wait = 0, P = 0; const R = new Map();
+          for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (!l2.made) { R.set(l2.by, (R.get(l2.by) || 0) + kk.rtf * est(l2)); wait = Math.max(wait, R.get(l2.by) - P); } }
+          const lead = Math.max(clamp(wait, 0, HOLD), q.prep ? clamp(q.prep + 0.45 - clock(), 0.06, 0.45) : 0.45);
+          if (!q.prep) setTimeout(() => alive() && ready(), Math.max(0, lead - 0.45) * 1000);                 // the breath before the first word
+          when = now + lead; q.on = true; q.held = lead;
+        } else when = Math.max(now + 0.06, q.end + GAP);
+        const src = actx.createBufferSource(); src.buffer = l.buf; src.connect(actx.destination); src.start(when); q.srcs.push(src);
+        l.when = when; q.end = when + l.secs; q.i++;
+      }
+      if (q.i >= lines.length && !q.closing) { q.closing = true; setTimeout(q.done, Math.max(0, q.on ? q.end - actx.currentTime + 0.3 : 0) * 1000); }
+    };
+    lines.forEach((l, i) => {                                                                                // each line goes to the worker with the least to do
+      const by = l.by = kk.pool.reduce((a, b) => b.load < a.load ? b : a), id = ++kk.id, cost = est(l); by.load += cost;
+      kk.wait[id] = m => { by.load = Math.max(0, by.load - cost); got(i, m); }; by.w.postMessage({ type: 'say', id, seq: my, text: l.text, voice });
+    });
+    setTimeout(() => alive() && !q.on && ready(), Math.max(0, kk.rtf * est(lines[0]) - 0.45) * 1000);          // the same breath, if the first line is expected about now
+  });
+}
+
+/* ── a borrowed voice: Claude's where the page is given one, the browser's own otherwise, none at all in the last resort ── */
+const io = { sample: null, tts: null, dictation: null, voice: 'speechSynthesis' in window ? 'browser' : 'none', chosen: '' };
+// which voice speaks the next reply
+function mode() { const v = $('voice').value || ''; return v.startsWith('k:') && kk.state === 'ready' && actx && actx.state === 'running' ? 'own' : io.tts ? 'claude' : io.voice; }
+function speak(lines, prep) {
+  // resolves when every line has been heard (or stopped); a line's mouth begins as it starts
+  const m = mode(); if (m === 'own') return speakOwn(lines, prep);
+  prep();
+  if (m === 'claude') { const v = $('voice').value || ''; return io.tts.speak(lines.map((l, i) => ({ text: l.text, id: 'l' + i })), { voice: v.startsWith('c:') ? v.slice(2) : 'airy' }); }
+  if (m === 'browser') return new Promise(done => {
     let i = 0; const next = () => {
       if (i >= lines.length || live.turn !== lines) return done();
       const k = i++, u = new SpeechSynthesisUtterance(lines[k].text);
@@ -925,41 +1071,94 @@ function speak(lines) {
 function mouthed(lines, from, done) {
   let i = from; const next = () => { if (i >= lines.length || live.turn !== lines) return done(); reach(i++); setTimeout(next, 1000 * ((live.beat ? live.beat.sp.len : 1) * live.stretch + 0.25)); }; next();
 }
-function hush() { live.turn = null; try { if (io.voice === 'claude') io.tts.stop(); else if (io.voice === 'browser') speechSynthesis.cancel(); } catch (e) {} }
+// Whatever is being said stops, and nothing more of that reply is made.
+function hush() {
+  const q = live.q; live.seq++; live.turn = null;
+  if (q) { for (const s of q.srcs) try { s.stop(); } catch (e) {} q.done(); }
+  for (const p of kk.pool) { p.load = 0; p.w.postMessage({ type: 'cancel', seq: live.seq }); }
+  try { if (io.tts) io.tts.stop(); } catch (e) {} try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+}
 
-function note() { $('how').textContent = (io.sample ? 'Replies come from Claude.' : 'Claude is not available in this view, so the reply is a stock line.') + ' ' + (io.voice === 'claude' ? 'The voice is one of Claude\'s.' : io.voice === 'browser' ? 'The voice is this device\'s own.' : 'There is no voice here, so the words are mouthed and shown.'); }
+/* ── what is said about itself under the picture ── */
+const KNAME = { af_heart: 'Heart', af_bella: 'Bella', am_michael: 'Michael', am_puck: 'Puck', am_fenrir: 'Fenrir' };
+function voiceList() {
+  const sel = $('voice'); let kept = ''; try { kept = localStorage.getItem('avatar-voice') || ''; } catch (e) {}
+  sel.textContent = '';
+  const group = (label, items) => { if (!items.length) return; const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of items) { const o = document.createElement('option'); o.value = v; o.textContent = t; g.append(o); } sel.append(g); };
+  group('Made on this device: lips exact', kk.state === 'ready' ? kk.voices.map(v => ['k:' + v, KNAME[v] || v]) : []);
+  group("Claude's voices: lips estimated", io.tts ? ['airy', 'buttery', 'glassy', 'rounded'].map(v => ['c:' + v, v[0].toUpperCase() + v.slice(1)]) : []);
+  $('voiceRow').hidden = !sel.options.length;
+  const want = [io.chosen, kept, 'k:' + FACE.voice].find(v => v && [...sel.options].some(o => o.value === v)); if (want) sel.value = want;
+}
+$('voice').onchange = () => { io.chosen = $('voice').value; try { localStorage.setItem('avatar-voice', io.chosen); } catch (e) {} note(); };
+function note() {
+  const borrowed = io.tts ? "one of Claude's voices speaks, and the lips are estimated from the spelling" : io.voice === 'browser' ? "this device's own voice speaks, and the lips are estimated from the spelling" : 'there is no voice, so the words are mouthed and shown';
+  const mb = v => Math.round(v / 1048576), own = ($('voice').value || 'k:').startsWith('k:');
+  const voice = kk.state === 'ready' && own ? `The voice is made on this device, and the lips follow the times the voice model reports. This device makes a line in ${kk.rtf.toFixed(1)} times the time it takes to say it${kk.pool.length > 1 ? ', ' + kk.pool.length + ' lines at a time' : ''}${kk.rtf > 1 ? ', so there is a wait before each answer' : ''}.`
+    : kk.state === 'ready' ? `With this voice ${borrowed}.`
+    : kk.state === 'loading' ? `The avatar's own voice is loading (${kk.step === 'model' && kk.of ? mb(kk.got) + ' of ' + mb(kk.of) + ' MB' : kk.step === 'starting' || kk.step === 'warming' ? 'starting the model' : 'starting'}). Until it is ready, ${borrowed}.`
+    : kk.state === 'needs' ? `The avatar's own voice is not set up in this browser yet (see below). Until it is, ${borrowed}.`
+    : kk.state === 'failed' ? `The avatar's own voice could not start in this view (${kk.error}). Instead ${borrowed}.` : `Here ${borrowed}.`;
+  $('how').textContent = (io.sample ? 'Replies come from Claude.' : 'Claude is not available in this view, so the avatar says back what you type.') + ' ' + voice;
+  // what the viewer is asked to add, with where to get it
+  const box = $('add'), need = kk.state === 'needs' ? kk.need : []; box.hidden = !need.length && !(kk.state === 'ready' && kk.from === 'cdn');
+  if (box.hidden) return;
+  const why = $('addWhy'), link = (href, text) => { const a = document.createElement('a'); a.href = href; a.textContent = text; a.target = '_blank'; a.rel = 'noopener'; return a; };
+  const names = Object.keys(KNAME), parts = [];
+  if (need.length) {
+    parts.push("The avatar's own voice, with exact lips, needs files this page cannot carry. Download them, then choose them all here; they are kept in this browser" + (kk.kept === false ? ' only until the page is closed' : '') + ' and sent nowhere. ');
+    if (need.includes('model')) parts.push(link(HF + 'onnx/model_quantized.onnx', 'The voice model (92 MB)'), '. ');
+    if (need.includes('voice')) { parts.push('A voice (0.5 MB each): '); names.forEach((n, i) => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), i < names.length - 1 ? ', ' : '. ')); }
+    if (need.includes('wasm')) parts.push(link('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm', 'The speech runtime (15 MB)'), '. ');
+  } else { parts.push('More voices (0.5 MB each, kept in this browser): '); names.filter(n => !kk.voices.includes(n)).forEach(n => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), ' ')); if (parts.length === 1) { box.hidden = true; return; } }
+  why.textContent = ''; why.append(...parts);
+}
+$('files').onchange = e => { const list = [...e.target.files]; e.target.value = ''; if (kk.add) kk.add(list); };
 /* ── the conversation ── */
 function setState(s, label) { live.state = s; const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
 function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; }
 async function reply(text) {
-  const msgs = [{ role: 'user', content: PERSONA }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
-  if (!io.sample) return "I can't reach Claude from this view, so this is a line I keep ready to show the lips moving.";
+  const msgs = [{ role: 'user', content: PERSONA + (slow() ? ' Keep every answer to one short sentence.' : '') }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
+  if (!io.sample) return /[A-Za-z]{2}/.test(text) ? text : "Type a sentence and I will say it.";                 // no Claude in this view: the words typed are the words spoken
   try { const r = await io.sample(msgs, { modelTier: 'quick', cache: false }); return (r.text || '').trim(); }
   catch (e) { return e && e.code === 'rate_limited' ? 'I need a moment before I can answer again.' : "I couldn't get an answer just now."; }
 }
+// A reply is spoken a sentence at a time; a long sentence is cut once more at a comma, so its first words come sooner
+// (sooner still when two workers can make the halves side by side). On a device that makes speech slower than it is
+// spoken even so, Claude is asked for one sentence.
+const slow = () => mode() === 'own' && kk.rtf / kk.pool.length > 1;
+function cut(answer) {
+  const out = [];
+  for (const s of answer.match(/[^.!?…]+[.!?…]*\s*/g) || [answer]) {
+    const t = s.trim(), long = slow() || (mode() === 'own' && kk.pool.length > 1) ? 64 : 110; if (!/[A-Za-z0-9]/.test(t)) continue;
+    const at = []; for (let i = 24; i < t.length - 24; i++) if (/[,;:—]/.test(t[i]) && t[i + 1] === ' ') at.push(i + 1);
+    if (t.length > long && at.length) { const m = at.reduce((a, b) => Math.abs(b - t.length / 2) < Math.abs(a - t.length / 2) ? b : a); out.push({ text: t.slice(0, m).trim() }, { text: t.slice(m).trim() }); } else out.push({ text: t });
+  }
+  return out;
+}
 async function turn(text) {
   text = text.trim(); if (!text) return;
-  const my = ++live.seq; hush(); if (live.beat) { finish(); rest(clock()); }                                  // a new question cuts her off
+  hush(); const my = live.seq; if (live.beat) { finish(); rest(clock()); }                                    // a new question cuts the answer off
   say('You', text); live.history.push({ role: 'user', content: text });
   if (live.idle) live.idle.mo.back.push([clock() - live.idle.start + 0.25, 0.6]);                              // a small nod: heard you
   setState('thinking', 'Thinking'); $('cap').textContent = '';
   const answer = (await reply(text)).replace(/[*_#`]/g, '').slice(0, 600) || 'Sorry, say that again?';
   if (my !== live.seq) return;                                                                                // something newer was asked meanwhile
-  live.history.push({ role: 'assistant', content: answer }); say('Avatar', answer);
-  const lines = (answer.match(/[^.!?…]+[.!?…]*\s*/g) || [answer]).map(s => ({ text: s.trim() })).filter(l => /[A-Za-z0-9]/.test(l.text));
+  live.history.push({ role: 'assistant', content: answer }); if (io.sample) say('Avatar', answer);
+  const lines = cut(answer);
   if (!lines.length) { setState('idle', 'Ready'); return; }
   lines[0].first = true; live.turn = lines; live.cur = -1;
-  // before the first sound: the smile lets go and a breath goes in, as they would
-  const ts = clock(), span = [ts + 0.45, 1e9]; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe();
-  setState('speaking', 'Speaking');
-  try { await speak(lines); } catch (e) {}
-  span[1] = clock(); if (my !== live.seq) return;
+  // just before the first sound: the smile lets go and a breath goes in, as they would
+  const span = [1e9, 1e9]; let begun = false;
+  const prep = () => { if (begun || my !== live.seq) return; begun = true; const ts = clock(); span[0] = ts + 0.45; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe(); setState('speaking', 'Speaking'); };
+  try { await speak(lines, prep); } catch (e) {}
+  if (begun) span[1] = clock(); if (my !== live.seq) return;
   finish(); live.turn = null; rest(clock()); setState('idle', 'Ready');
 }
-$('talk').addEventListener('submit', e => { e.preventDefault(); const v = $('say').value; $('say').value = '';
-  if (io.voice === 'browser' && !io.unlocked) { io.unlocked = true; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (x) {} }      // some browsers only speak after a first tap
+$('talk').addEventListener('submit', e => { e.preventDefault(); const v = $('say').value; $('say').value = ''; sound();
+  if (io.voice === 'browser' && !io.tts && !io.unlocked) { io.unlocked = true; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (x) {} }      // some browsers only speak after a first tap
   turn(v); });
-$('stop').onclick = () => hush();
+$('stop').onclick = () => { hush(); finish(); rest(clock()); setState('idle', 'Ready'); };
 
 /* ── picture ── */
 function frame() {
@@ -967,6 +1166,10 @@ function frame() {
   if (pending > 0) { requestAnimationFrame(frame); return; }
   if (live.state === 'loading') { rest(ts); breathe(); setState('idle', 'Ready'); }
   if (ts > live.until - 120) breathe();                          // keep the quiet breathing going
+  if (live.q && live.turn === live.q.lines) {                    // the avatar's own voice: a line's mouth begins when its audio is about to be heard
+    const L = live.turn, heard = actx.currentTime - lag();
+    for (let k = live.cur + 1; k < L.length; k++) { const l = L[k]; if (l.skip) continue; if (l.when != null && heard >= l.when - PRE - 0.03) reach(k, ts + l.when - heard); break; }
+  }
   const b = live.beat || live.idle, bt = live.beat ? PRE + planned() : ts - live.idle.start, f = a.m.face;
   c.setTransform(1, 0, 0, 1, -clamp(f.cx - 384, 0, FW - 768), 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
   drawActor(WHO, ts, { b, bt, zb: 1, zf: 1.02 });
@@ -981,24 +1184,25 @@ requestAnimationFrame(frame);
 /* ── what this view of the page can do ── */
 (async () => {
   const use = n => window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null);
+  $('note').textContent = FACE.note;
   use('sample').then(s => { io.sample = s; note(); });
   use('tts').then(t => {
-    if (t) { io.tts = t; io.voice = 'claude'; $('voiceRow').hidden = false;
-      // Three signals say where the voice is: a line starting, the voice starting at all (then it is on the first line),
-      // and the position within a line (which starts again from nothing when the next line begins).
+    if (t) { io.tts = t;
+      // Three signals say where a borrowed voice is: a line starting, the voice starting at all (then it is on the first
+      // line), and the position within a line (which starts again from nothing when the next line begins).
       t.onLine(({ line, id }) => reach(id != null ? +String(id).slice(1) : +line));
       t.onState(({ state }) => { if (state === 'speaking' && live.cur < 0) reach(0); });
-      t.onPosition(({ ms }) => { if (live.cur < 0) reach(0); if (!sync.on) return; const at = ms / 1000; if (at < sync.heard - 0.3) reach(live.cur + 1); sync.heard = at; sync.plan = at / sync.k; sync.at = wall(); }); }
-    note();
+      t.onPosition(({ ms }) => { if (live.cur < 0) reach(0); if (!sync.on || sync.audio != null) return; const at = ms / 1000; if (at < sync.heard - 0.3) reach(live.cur + 1); sync.heard = at; sync.plan = at / sync.k; sync.at = wall(); }); }
+    voiceList(); note();
   });
   use('dictation').then(d => {
     if (!d) return; io.dictation = d; const mic = $('mic'); mic.hidden = false; let heard = '';
     d.onPartial(({ text }) => { $('say').value = (heard + ' ' + text).trim(); });
     d.onFinal(({ text }) => { heard = (heard + ' ' + text).trim(); $('say').value = heard; d.stop().catch(() => {}); });      // one phrase is one turn
     d.onState(({ state }) => { const on = state === 'listening'; mic.setAttribute('aria-pressed', on); mic.textContent = on ? 'Listening…' : 'Speak'; if (on) setState('listening', 'Listening'); else { if (live.state === 'listening') setState('idle', 'Ready'); const v = heard; heard = ''; if (v) { $('say').value = ''; turn(v); } } });
-    mic.onclick = () => { if (mic.getAttribute('aria-pressed') === 'true') d.stop().catch(() => {}); else { hush(); heard = ''; d.start().catch(() => {}); } };
+    mic.onclick = () => { sound(); if (mic.getAttribute('aria-pressed') === 'true') d.stop().catch(() => {}); else { hush(); if (live.beat) { finish(); rest(clock()); } heard = ''; d.start().catch(() => {}); } };
   });
-  note();
+  voiceList(); note(); ownVoice();
 })();
 </script>
 </body>
