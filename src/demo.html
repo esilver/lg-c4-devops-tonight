@@ -237,7 +237,7 @@ $('play').onclick = () => setPlaying(!st.playing);
 $('snd').onclick = () => {
   if (!soundToggle()) { $('snd').textContent = 'No audio'; return; }
   snd.pan.coneInnerAngle = 360; snd.pan.coneOuterAngle = 360;                    // no room here: the voice goes straight to the listener
-  $('snd').textContent = snd.on ? 'Sound: on' : 'Sound: off'; $('snd').setAttribute('aria-pressed', snd.on);
+  $('snd').setAttribute('aria-pressed', snd.on);
 };
 const step = d => { setPlaying(false); st.vt = clamp(Math.round(st.vt * FPS + d) / FPS, 0, total - 0.001); };
 $('back').onclick = () => step(-1); $('fwd').onclick = () => step(1);
@@ -271,6 +271,7 @@ function tick(ms) {
     sndTo(snd.master, 0.85, 0.05);
     if (st.playing && snd.ready) sndPlay('cur', b.ai, snd.bufs[b.ai], snd.chain[sndVoiceKind(b)], bt - b.lead + sndLatency() * st.speed, st.speed); else sndStop('cur');
   }
+  { const lab = SND_LABEL[sndStatus()], el = $('snd'); if (el.textContent !== lab && el.textContent !== 'No audio') el.textContent = lab; }
   $('tc').textContent = fmt(st.vt) + ' / ' + fmt(total);
   if (document.activeElement !== $('scrub')) $('scrub').value = Math.round(st.vt * 1000);
   for (const el of $('lines').children) el.setAttribute('aria-pressed', +el.dataset.i === i);

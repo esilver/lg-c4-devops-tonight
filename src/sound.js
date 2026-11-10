@@ -4,7 +4,7 @@
    The set is a point in space and the listener sits at the camera: backing away quietens it and brings up the sound of
    the room, moving off to the side takes some level off, and going behind the panel muffles it. Nothing plays until the viewer turns sound on, because browsers require a click. */
 const CALIB = /*CALIB*/'';            // a tiny MP3 with a tone burst at a known time, used to measure the decoder's delay
-const snd = { ac: null, on: false, ready: false, vol: 0.7, bufs: [], sting: {}, lag: 0, cur: null, mus: null, osdAt: -9, sw: null, pw: null, hits: -1, tick: -1 };
+const snd = { ac: null, on: false, ready: false, vol: 0.7, bufs: [], sting: {}, lag: 0, cur: null, mus: null, osdAt: -9, sw: null, pw: null, hits: -1, tick: -1, keep: null };
 
 function sndBytes(uri) { const bin = atob(uri.slice(uri.indexOf(',') + 1)), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
 function sndDecode(uri) { return new Promise((ok, no) => snd.ac.decodeAudioData(sndBytes(uri), ok, no)); }        // callback form: older Safari has no promise
@@ -191,10 +191,40 @@ function soundFrame(frameT, eye) {
   if (live && channel === 2) { if (snd.hits >= 0 && dvd.hits !== snd.hits) { if (dvd.corners !== snd.corners) { sndBlip(740); sndBlip(932, 0.09); sndBlip(1109, 0.18); } else sndBlip(620 + (dvd.hits % 5) * 70); } snd.hits = dvd.hits; snd.corners = dvd.corners; } else snd.hits = -1;
   if (live && channel === 3) { const k = Math.floor(t * 45 / 40); if (snd.tick >= 0 && k !== snd.tick) sndTick(); snd.tick = k; } else snd.tick = -1;
 }
+/* iPhones and iPads. Web Audio there follows the ringer switch: with the phone on silent, a page's sound is muted even
+   though videos play. Two things lift that, and both must happen inside the tap: asking for a "playback" audio session
+   (iOS 17 and later), and, for older systems, keeping a silent <audio> element playing, which puts the page in the
+   same class as a video. Neither does anything on other devices. */
+function sndUnlock() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios && !snd.keep) {
+    try {                                                        // half a second of silence as a WAV, looped
+      const n = 4000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), put = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };
+      put(0, 'RIFF'); v.setUint32(4, 36 + n, true); put(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); put(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+      const el = snd.keep = document.createElement('audio'); el.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+      el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', ''); el.setAttribute('x-webkit-airplay', 'deny');
+    } catch (e) { snd.keep = null; }
+  }
+  if (snd.keep) { if (snd.on) { const p = snd.keep.play(); if (p && p.catch) p.catch(() => {}); } else snd.keep.pause(); }
+  // start something inside the tap as well: older systems only unlock the context when a source starts in the gesture
+  try { const src = snd.ac.createBufferSource(); src.buffer = snd.ac.createBuffer(1, 1, snd.ac.sampleRate); src.connect(snd.ac.destination); src.start(0); } catch (e) {}
+}
+// 'off', 'on', 'loading' (recordings still decoding) or 'blocked' (the device has not let the sound start: tap again)
+function sndStatus() { return !snd.ac || !snd.on ? 'off' : snd.ac.state !== 'running' ? 'blocked' : snd.ready ? 'on' : 'loading'; }
+const SND_LABEL = { off: 'Sound: off', on: 'Sound: on', loading: 'Sound: loading', blocked: 'Sound: tap again' };
 function soundToggle() {
   if (!snd.ac) { if (!sndCreate()) return false; sndLoad(); }
-  snd.on = !snd.on;
+  const stuck = snd.on && snd.ac.state !== 'running';             // a tap while blocked is another try, not "off"
+  if (!stuck) snd.on = !snd.on;
+  sndUnlock();
   if (snd.on) { const p = snd.ac.resume(); if (p && p.catch) p.catch(() => {}); }
   else { sndStop('cur'); sndStop('mus'); const p = snd.ac.suspend(); if (p && p.catch) p.catch(() => {}); }
   return true;
 }
+// Coming back to the page (after a call, or from another app) the system may have paused the sound: pick it up again.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !snd.ac || !snd.on) return;
+  const p = snd.ac.resume(); if (p && p.catch) p.catch(() => {}); if (snd.keep) { const q = snd.keep.play(); if (q && q.catch) q.catch(() => {}); }
+});

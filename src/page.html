@@ -376,7 +376,7 @@ document.getElementById('power').onclick = togglePower;
 const soundBtn = document.getElementById('sound');
 function toggleSound() {                     // browsers only allow audio to start from a click or key press, so sound begins off
   if (!soundToggle()) { soundBtn.textContent = 'No audio'; return; }
-  soundBtn.textContent = snd.on ? 'Sound: on' : 'Sound: off'; soundBtn.setAttribute('aria-pressed', snd.on); snd.osdAt = nowT;
+  soundBtn.setAttribute('aria-pressed', snd.on); snd.osdAt = nowT;
 }
 function volume(d) { snd.vol = Math.max(0, Math.min(1, Math.round((snd.vol + d) * 10) / 10)); snd.osdAt = nowT; }
 soundBtn.onclick = toggleSound;
@@ -417,6 +417,7 @@ function frame(ms) {
   const eye = [cam.target[0] + dist * cp * Math.sin(cam.yaw), cam.target[1] + dist * Math.sin(cam.pitch), cam.target[2] + dist * cp * Math.cos(cam.yaw)];
   const vp = mul(perspective(0.7, asp, 0.05, 60), lookAt(eye, cam.target));
   soundFrame(nowT, eye);
+  { const lab = SND_LABEL[sndStatus()]; if (soundBtn.textContent !== lab && soundBtn.textContent !== 'No audio') soundBtn.textContent = lab; }
 
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.clearColor(BG[0], BG[1], BG[2], 1);
