@@ -123,3 +123,25 @@ regenerate them.
 | `src/history/news_photo_v1_inpainted_mouths.js` | The first photographic version (request 4) |
 
 The built pages of all five published versions are in the web artifact's own history, not here.
+
+## Added in request 8
+
+| File | Status | What it is |
+|---|---|---|
+| `src/speech.json` | final | The sixteen recordings as MP3 `data:` URIs with word and phoneme timing, 1.0 MB |
+| `src/calib.txt` | final | The 3 KB calibration clip for measuring decoder delay |
+| `src/sound.js` | final | The sound engine |
+| `src/phon.json`, `gen/phon.py` | superseded | Dictionary pronunciations for the first speech engine |
+| `gen/work/tts/NN_<who>.wav` | intermediate | Each line as the speech model produced it, 24 kHz |
+| `gen/work/tts/lines.json` | intermediate | Phonemes, lengths, loudness and word times for each line |
+| `gen/work/tts/mp3/` | final (the MP3s) | Each line trimmed and levelled, as WAV and MP3, plus the calibration clip |
+| `gen/work/<presenter>/lp/f_smile.png` | final (as a mouth sprite) | The smile pose |
+| `gen/out/base_dcext2_*.png`, `base_paged2_*.png`, `base_office2_*.png`, `still_*2.png`, `sheet_broll2.jpg` | final (seeds 52, 51, 52) and rejected | Second-round B-roll |
+| `demo/devops-tonight.mp4` | evidence | The whole bulletin with sound, 110 s |
+| `demo/paige-lipsync.mp4` | evidence | Replaced: now with sound, 26.6 s |
+| `tests/output/rec.webm` | evidence | The set's sound output for one whole bulletin, as the page played it |
+| `tests/output/music_intro.mp3`, `music_outro.mp3` | evidence | The two pieces of synthesised music as the page rendered them |
+| `tests/output/audio_analysis.txt`, `sound_check.json` | evidence | The analysis of that recording and the sync log |
+| `tests/output/g_smile.jpg`, `g_broll2.jpg`, `refl.png`, `reg.jpg` | evidence | Smile moments, new B-roll in use, the reflection from above, desktop and phone layouts |
+
+`assets.json` now holds 116 images.

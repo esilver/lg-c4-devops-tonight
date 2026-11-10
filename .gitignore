@@ -1,10 +1,13 @@
 # model weights and Python environments are large and downloadable: see gen/download_models.py and docs/03
-gen/models/
-gen/venv/
-gen/venv2/
+gen/models
+gen/venv
+gen/venv2
 __pycache__/
 # regenerable frame dumps
 rec_*/
 fr/
 tests/output/q*.jpg
 assets_fake.json
+gen/venv3
+tests/output/*.wav
+tests/output/*.f32

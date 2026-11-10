@@ -120,3 +120,7 @@ would not contradict the new theme. This was reported at the time.
 | `gen/cast_assets.json`, `gen/work/*/export/` | The first lip-sync's bundle and cut-outs |
 
 None of the model files are in this repository; `gen/download_models.py` lists them.
+
+## Request 8: voices, sound and polish
+
+The problems of this pass are tabulated at the end of [12](12-voices-and-sound.md).

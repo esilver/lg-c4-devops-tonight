@@ -9,7 +9,7 @@ tests can render any moment directly.
 | Constant | Filled by | Holds |
 |---|---|---|
 | `ASSETS` | `build.py` from `assets.json` | `img`: six B-roll stills. `cast`: per presenter a background plate, a cut-out, face measurements, 16 mouth sprites, 3 eye sprites, an opening gain |
-| `SPOKEN` | `build.py` from `src/phon.json` | pronunciation of each spoken line |
+| `SPEECH` | `build.py` from `src/speech.json` | each spoken line: the recording, caption word times, and every phoneme with start, length and loudness |
 | `SHOW` | written in the file | the running order |
 
 Images are `data:` URIs, loaded into `Image` objects at start. Until all have decoded the channel shows a title slate.
@@ -107,3 +107,11 @@ small tiles, depending on how large the face is in frame, and up to seven sprite
 [`src/demo.html`](../src/demo.html) includes the same `news.js` untouched and adds its own `drawPresenter`, a copy of
 `drawActor` with switches for head movement and parallax, plus a transport bar and a chart of the two speech curves. It
 plays each presenter's lines back to back. Time there is virtual, so half speed slows blinks and head movement too.
+
+## Added in request 8
+
+- `showAt(t)` returns the line on air and the time into it. `chNews` and the sound engine both use it, so picture and
+  sound always agree on where the bulletin is. `cutAt(line, time)` does the same for cutaways.
+- `drawActor` takes a smile weight, and stretches the cut-out by ±0.35 % about the bottom of the frame as breathing.
+- The page now carries [`src/sound.js`](../src/sound.js). Everything about sound is in [12](12-voices-and-sound.md).
+- The sprite count per presenter is 17 mouth poses and 3 eye poses. The built page is 3.5 MB.

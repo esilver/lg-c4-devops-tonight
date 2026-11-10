@@ -26,7 +26,7 @@ colour, so there is one vertex buffer and one draw call per box.
 | Stand neck | 0.36 × 0.19 × 0.03 | aluminium grey |
 | Stand plate | 0.475 × 0.012 × 0.23 | aluminium grey |
 | Standby LED | 0.022 × 0.004 × 0.006 | under the panel, glows red when the set is off |
-| Console | 2.0 × 0.44 × 0.44 body, 2.06 × 0.02 × 0.48 top, two feet, a door gap | top surface at 0.5 m |
+| Console | 2.0 × 0.42 × 0.44 body, 2.06 × 0.02 × 0.48 top, two feet, a door gap | top surface at 0.5 m, glossy |
 | Floor | 18 × 18 | fades into the background with distance |
 
 The picture is inset 7 mm from the panel edge and sits 0.6 mm in front of it.
@@ -37,6 +37,11 @@ The picture is inset 7 mm from the panel edge and sits 0.6 mm in front of it.
 the spill, each surface point finds the nearest point on the screen rectangle, treats it as the emitter, and receives the
 picture's average colour scaled by the angle to the surface, by how far in front of the screen the point lies, and by
 distance. Colour then fades to the background between 2.2 m and 7.5 m from the centre.
+
+**Reflection.** Surfaces marked glossy (the console top and the stand plate) also reflect the picture. For a fragment
+facing up, the shader reflects the view ray, finds where it meets the screen plane, and if that lands on the picture adds
+the texture there, read from a blurrier mip level and faded the further the ray travelled. The console is shallow and the
+picture starts 7 cm above it, so the reflection shows only from a raised camera.
 
 **Picture.** The texture, plus a glass sheen that grows at grazing angles. An OLED has true black, so nothing is added
 when the picture is dark.
@@ -54,8 +59,9 @@ An orbit camera looks at a point 0.9 m up. It drifts slowly until the first touc
 −0.12 to 1.35 radians so the camera stays above the floor), wheel or pinch zooms between 1.1 m and 6.5 m. On portrait
 screens the distance is multiplied by `0.92 / aspect` so the whole set stays in frame.
 
-The remote is ordinary HTML over the canvas: power, channel down, the channel name, channel up. Keys: arrows change
-channel, `1`–`5` jump, `P` toggles power.
+The remote is ordinary HTML over the canvas: power, channel down, the channel name, channel up, sound, volume down,
+volume up. Keys: arrows change channel, `1`–`5` jump, `P` toggles power, `M` toggles sound, `-` and `=` change the
+volume. On phones the volume buttons are hidden. Turning sound on or changing the volume shows a bar on the TV picture.
 
 ## Channels
 
@@ -81,3 +87,8 @@ channel", so one bad frame cannot stop the set.
 - The standing line under the controls: "Channel 1 is satire. Its presenters and locations are AI-generated stills, not
   real people or places." (request 4).
 - The header comment describing where the pictures come from (requests 4 and 6).
+- Sound: the buttons, keys and volume bar, and the call to the sound engine each frame (request 8). The engine itself is
+  [`src/sound.js`](../src/sound.js), described in [12](12-voices-and-sound.md).
+- The reflection, and a fix to the console: its body and top slab had coplanar top faces that flickered against each other
+  as a stepped pattern. The body now stops under the slab (request 8).
+- The picture is uploaded to the GPU before the boxes are drawn, because the boxes now read it (request 8).

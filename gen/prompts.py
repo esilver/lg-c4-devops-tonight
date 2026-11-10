@@ -29,3 +29,8 @@ VIS = {
 P["cy2"] = f"RAW photo, television news anchor, Black man in his 40s with short hair, navy suit, white shirt, green tie, sitting at a news desk, front view, centered, {FACE}, calm expression, medium close-up, {STUDIO}"
 P["cy"] = P["cy2"]
 P["cy"] = f"RAW photo, television news anchor, Black man in his 40s with short hair, white shirt, green tie, sitting at a news desk, front view, {FACE}, calm expression, medium close-up, newsroom with monitors blurred in background, broadcast footage, studio lighting"
+# second-round B-roll, to fix mismatches noticed after the first export: the establishing shot should look like the building
+# behind the reporter, the paged engineer should be holding a phone, and the office should be dark
+P["dcext2"] = "RAW photo, modern data center campus, large building with glass facade and concrete columns, overcast daylight, wide shot, documentary photography"
+P["paged2"] = "RAW photo, tired software engineer in a hoodie sitting up in bed at night, holding a glowing smartphone in his hand, looking at the phone screen, dark bedroom, blue light on face, documentary photography"
+P["office2"] = "RAW photo, dark empty open-plan office at night, lights off, rows of desks, computer monitors glowing with code in the darkness, moody blue light, shallow depth of field"

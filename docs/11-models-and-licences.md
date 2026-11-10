@@ -7,7 +7,8 @@
   If one resembles someone, that is coincidence.
 - **The places are synthetic** too: the studio, the data centre, the server aisle, the office and the satellite view.
 - **The news is invented.** "DevOps Tonight" is satire. The page says so under its controls and in its credits.
-- **There is no voice.** Nothing here synthesises or imitates speech audio.
+- **The voices are synthetic.** They are stock voices of an open speech model. No real person's voice was recorded,
+  cloned or imitated.
 
 ## Licences were not checked during the session
 
@@ -27,7 +28,10 @@ All files came from the Hugging Face Hub. Nothing in `gen/models/` is committed.
 | YuNet face detector | `opencv/face_detection_yunet` | Eye and mouth positions | MIT |
 | BiRefNet-portrait, ONNX | `onnx-community/BiRefNet-portrait-ONNX` | Person mattes | MIT |
 | LivePortrait, ONNX export | `warmshao/FasterLivePortrait` (`liveportrait_onnx/`) | Re-posing each face | MIT for the original project; the export's own terms were not looked at |
-| CMU Pronouncing Dictionary | Python package `cmudict` 1.1.3 | Pronunciations | A permissive BSD-style licence |
+| CMU Pronouncing Dictionary | Python package `cmudict` 1.1.3 | Pronunciations for the first speech engine (request 6) | A permissive BSD-style licence |
+| Kokoro-82M | `hexgrad/Kokoro-82M`, through the `kokoro` 0.9.4 and `misaki` 0.9.4 packages | The spoken lines and their timing (request 8) | Apache 2.0 |
+| spaCy English model | `spacy/en_core_web_sm` 3.7.1 | Tokenising text for the speech model | MIT |
+| Whisper base (English) | `openai/whisper-base.en` | Checking the recordings by transcribing them. Not part of the result | MIT |
 
 ## Downloaded but not part of the result
 
@@ -52,6 +56,7 @@ its bundled Python wheel were deliberately not downloaded, and neither were its 
 | onnxruntime | 1.31.1 |
 | OpenCV (headless) | 5.0.0.93 |
 | Pillow | 13.0.0 |
+| Python for the speech model | 3.12, in `gen/venv3` (`gen/requirements-venv3.txt`) |
 | Node / Playwright | 22.23.4 / 1.63.0 |
 | ffmpeg | 6.1.1 |
 

@@ -56,7 +56,7 @@ Index is the keypoint (0 to 20) and axis; the value is added per unit of the con
 | `woo` (lips round) | [14].y += 0.001, [3].y −= 0.0005, [7].y −= 0.0005, [17].z −= 0.0005 | 12 |
 | `blink` | [11].y −= 0.001, [13].y += 0.0003, [15].y −= 0.001, [16].y += 0.0003 | −9 (half), −17 (closed) |
 | `brow` (raise, when positive) | [1].y += 0.001, [2].y −= 0.001 | 9 |
-| `smile` | [20].y −= 0.01, [14].y −= 0.02, [17].y += 0.0065, [17].z += 0.003, [13].y and [16].y −= 0.00275, [3].y and [7].y −= 0.0035 | tested, not used |
+| `smile` | [20].y −= 0.01, [14].y −= 0.02, [17].y += 0.0065, [17].z += 0.003, [13].y and [16].y −= 0.00275, [3].y and [7].y −= 0.0035 | 0.5, added in request 8 |
 | pupil x, y | [11] and [15], x and y | tested, not used |
 
 These indices and coefficients follow the expression sliders in LivePortrait's own editing tools. They were written from
@@ -139,10 +139,22 @@ and 264 × 225 pixels for Paige, 301 KB of sprites, with stray blobs). With the 
 | Sunny | 97 KB | 14 KB | 24 KB | 40 KB | 1.05 |
 | Mel | 274 KB | 38 KB | 40 KB | 58 KB | 0.95 |
 
-Sizes are base64 text as stored in `assets.json`. "Opening gain" scales how wide each presenter opens their mouth; it was
+Sizes are base64 text as stored in `assets.json` at the time of request 6. The smile sprite added in request 8 brings the
+mouth sets to 162, 211, 287, 104 and 291 KB. "Opening gain" scales how wide each presenter opens their mouth; it was
 0.92, 0.86, 1.0, 0.92 and 0.8 at first and was raised once the film strips showed the articulation was faint.
 
 ```
 ./venv/bin/python lpexport.py          # writes cast_lp.json
 ./venv/bin/python assets2.py           # adds the B-roll stills and writes ../assets.json
+```
+
+## Added in request 8: a smile
+
+`gen/lp_extra.py` renders one more pose per presenter, `lp/f_smile.png` (smile 0.5, jaw closed). `lpexport.py` treats it as
+a 17th mouth pose, so it shares the mouth mask and is stored as `mouth.s`. How it is used is in
+[06](06-speech-engine.md).
+
+```
+./venv2/bin/python lp_extra.py paige cy dee sunny mel
+./venv/bin/python lpexport.py && ./venv/bin/python assets2.py
 ```

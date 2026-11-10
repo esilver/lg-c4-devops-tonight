@@ -1,6 +1,6 @@
 # Timeline
 
-Everything happened in one session on 9 November 2026. Times are UTC, taken from the publish receipts and from clock
+Everything happened in one session on 9 and 10 November 2026. Times are UTC, taken from the publish receipts and from clock
 readings printed while the pipeline ran. Where no reading exists, no time is given. The page was published as a web artifact after each request; the version ids below are that artifact's history.
 
 | # | Request, in the requester's words | Result | Published |
@@ -12,6 +12,7 @@ readings printed while the pipeline ran. Where no reading exists, no time is giv
 | 5 | "Still vanila js?" | An answer only; no change | none |
 | 6 | "Lip movement is funny not natural" | Second lip-sync: re-posed faces driven by pronunciation | 22:39, `1794263977-2948` |
 | 7 | "Can I see demo after just that presenter so I can judge? Export all scripts and assets to a new repo, with Md files…" | The demo page, a recording, and this repository | demo at 22:47, `1794264437-c1e2` |
+| 8 | "can we make it even better? with perfect audio and just better overall?" | Voices, lips timed to them, sound design, visual fixes | 10 Nov 01:26, `1794273969-4f1d`; demo `1794274002-c6fe` |
 
 The main page's artifact was private for versions 1 to 3. Its owner made it public some time before version 4 was
 published, so versions 4 and 5 went to a public page. The demo page is a separate, private artifact.
@@ -111,3 +112,19 @@ In order:
 - This repository. The working folder was copied as it stood, the test scripts were moved into `tests/` with their
   paths adjusted, three helper scripts were added (they are marked as such in their headers), and these documents were
   written. `python3 build.py` was run in the copy to confirm it reproduces both pages byte for byte.
+
+## 8. Voices, sound and polish (10 November, published 01:26)
+
+Described in full in [12](12-voices-and-sound.md). In order:
+
+1. The speech model's current release would not install on the session's Python, so a third environment was made.
+2. All sixteen lines were spoken with five voices and transcribed back by a speech recogniser as a check.
+3. The lip animation was changed to follow the measured length of every sound in each recording.
+4. A sound engine was written: voice kept in step with the picture, synthesised music and ambience, TV sounds, and
+   level that depends on where the camera is.
+5. Sound was added to the demo page.
+6. Smiles, breathing, a reflection of the picture in the console, a fix for a console artefact, and three regenerated
+   B-roll stills.
+7. One whole bulletin was played in a headless browser while its sound output was recorded, then analysed.
+8. Two videos with sound were rendered, both pages were published, and the work was pushed to the branch
+   `claude/audio-and-polish`.

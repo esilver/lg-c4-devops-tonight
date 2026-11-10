@@ -166,3 +166,21 @@ The export step (`lpexport.py` now, `export.py` in the first lip-sync) then:
   Only the plate's rim is ever seen, when the presenter shifts by a few pixels.
 
 The cut-out is stored as WebP with transparency and the plate as JPEG, both inside `assets.json`.
+
+## Second-round B-roll (request 8)
+
+Three stills did not fit the script, so they were generated again with new prompts (`gen/prompts.py`, keys ending in `2`),
+two seeds each. The contact sheet is `out/sheet_broll2.jpg`.
+
+| Key | Prompt | Picked | Result |
+|---|---|---|---|
+| `dcext2` | RAW photo, modern data center campus, large building with glass facade and concrete columns, overcast daylight, wide shot, documentary photography | seed 52 | Matches the building behind the reporter. Seed 51 was also usable |
+| `paged2` | RAW photo, tired software engineer in a hoodie sitting up in bed at night, holding a glowing smartphone in his hand, looking at the phone screen, dark bedroom, blue light on face, documentary photography | seed 51 | He holds a lit phone. Seed 52 gave a tablet and lettering on the hoodie |
+| `office2` | RAW photo, dark empty open-plan office at night, lights off, rows of desks, computer monitors glowing with code in the darkness, moody blue light, shallow depth of field | seed 52 | Dusk, blue light. The model would not make it dark; seed 51 was fully daylit |
+
+`gen/assets2.py` now takes `dcext`, `paged` and `office` from these. The first-round stills are still in `gen/out/`.
+
+```
+./venv/bin/python gen_base.py dcext2,paged2,office2 51,52
+./venv/bin/python stills.py dcext2=52 paged2=51 office2=52
+```

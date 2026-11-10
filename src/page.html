@@ -11,7 +11,7 @@
   #gl:active { cursor: grabbing; }
   #remote {
     position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%);
-    display: flex; gap: 8px; align-items: center; padding: 8px;
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center; padding: 8px; width: max-content; max-width: calc(100vw - 16px);
     background: rgba(20, 22, 28, .82); border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
     backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   }
@@ -22,6 +22,10 @@
   #remote button:hover { background: rgba(255,255,255,.16); }
   #remote button:focus-visible { outline: 2px solid #2ee6a6; outline-offset: 2px; }
   #power { color: #ff6b5e !important; }
+  #sound { min-width: 6.6em; } #sound[aria-pressed=true] { color: #2ee6a6; border-color: rgba(46,230,166,.6); }
+  #remote .sep { width: 1px; align-self: stretch; background: rgba(255,255,255,.14); }
+  @media (max-width: 760px) { #remote .sep { display: none; } }
+  @media (max-width: 520px) { #voldn, #volup { display: none; } }        /* phones have their own volume keys */
   #chname { min-width: 8.5em; text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
   @media (max-width: 440px) { #remote { gap: 5px; padding: 6px; } #remote button { padding: 9px 10px; min-width: 42px; } #chname { min-width: 7.5em; font-size: 13px; } }
   #hint small { font-size: 11.5px; opacity: .8; }
@@ -31,12 +35,16 @@
 </head>
 <body>
 <canvas id="gl"></canvas>
-<div id="hint">Drag to orbit · scroll or pinch to zoom · ← → change channel · P power<br><small>Channel 1 is satire. Its presenters and locations are AI-generated stills, not real people or places.</small></div>
+<div id="hint">Drag to orbit · scroll or pinch to zoom · ← → change channel · P power · M sound<br><small>Channel 1 is satire. Its presenters and locations are AI-generated stills, not real people or places.</small></div>
 <div id="remote" role="group" aria-label="TV remote">
   <button id="power" aria-label="Power">⏻</button>
   <button id="prev" aria-label="Previous channel">CH −</button>
   <span id="chname"></span>
   <button id="next" aria-label="Next channel">CH +</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button id="sound" aria-pressed="false">Sound: off</button>
+  <button id="voldn" aria-label="Volume down">VOL −</button>
+  <button id="volup" aria-label="Volume up">VOL +</button>
 </div>
 <div id="err">WebGL isn't available in this browser, so the TV can't be drawn.</div>
 <script>
@@ -44,7 +52,8 @@
 // Plain JavaScript throughout: raw WebGL for the TV, Canvas 2D for the picture, no libraries.
 // The news channel's photographs are AI-generated stills embedded below as data: URIs, together with a
 // few re-posed renders of each face (jaw, lips, eyelids, brows). All motion is composited from them in
-// this script: speech curves, blinks, head movement, camera and graphics.
+// this script: speech curves, blinks, head movement, camera and graphics. The voices are recordings made by a
+// speech model, inlined as MP3; the music, ambience and effects are synthesised with Web Audio.
 
 /* ───────────────────────── The channel (Canvas 2D → texture) ───────────────────────── */
 const SW = 1024, SH = 576;
@@ -174,6 +183,15 @@ function drawScreen(t) {
   // power-on fade
   const p = t - powerAt;
   if (p < 0.8) { c.fillStyle = `rgba(0,0,0,${1 - p / 0.8})`; c.fillRect(0, 0, SW, SH); }
+  // volume display after the sound button or a volume key
+  const v = t - snd.osdAt;
+  if (v >= 0 && v < 1.8) {
+    c.globalAlpha = Math.min(1, (1.8 - v) / 0.3); c.fillStyle = 'rgba(0,0,0,.62)'; c.fillRect(40, 74, 316, 54);
+    c.fillStyle = '#7CFC7C'; c.beginPath(); c.moveTo(58, 94); c.lineTo(68, 94); c.lineTo(80, 84); c.lineTo(80, 118); c.lineTo(68, 108); c.lineTo(58, 108); c.closePath(); c.fill();
+    if (!snd.on) { c.font = `bold 20px ${MONO}`; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillText('SOUND OFF', 98, 108); }
+    else for (let i = 0; i < 10; i++) { c.fillStyle = i < Math.round(snd.vol * 10) ? '#7CFC7C' : 'rgba(124,252,124,.22)'; c.fillRect(98 + i * 24, 88, 16, 26); }
+    c.globalAlpha = 1;
+  }
 }
 
 /* ───────────────────────── WebGL ───────────────────────── */
@@ -214,7 +232,8 @@ void main(){ vW = aPos*uS + uC; vN = aNor; gl_Position = uVP*vec4(vW,1.); }`, `
 precision mediump float;
 uniform vec3 uColor, uEye, uGlow, uEmis, uBg;
 uniform vec4 uRect;                    // screen rectangle: x0, y0, x1, y1 at z = 0
-uniform float uShine, uSpec;
+uniform float uShine, uSpec, uRefl;
+uniform sampler2D uTex;
 varying vec3 vW, vN;
 void main(){
   vec3 n = normalize(vN), v = normalize(uEye - vW);
@@ -226,6 +245,15 @@ void main(){
   float d = length(toS); vec3 dir = toS/max(d,1e-4);
   float g = max(dot(n,dir),0.) * max(-dir.z,0.) / (1. + 5.*d*d);
   vec3 col = uColor*(.34 + diff) + spec + uColor*uGlow*g*5. + uEmis;
+  if (uRefl > 0. && n.y > .9) {            // the picture mirrored in a glossy top: follow the reflected ray to the screen plane
+    vec3 r = reflect(-v, n);
+    if (r.z < -.001 && vW.z > 0.) {
+      float tt = -vW.z / r.z; vec2 uv = ((vW + tt*r).xy - uRect.xy) / (uRect.zw - uRect.xy);
+      vec2 e = smoothstep(vec2(0.), vec2(.03), uv) * smoothstep(vec2(0.), vec2(.03), 1. - uv);
+      float fres = .3 + .7*pow(1. - max(dot(v,n),0.), 3.);
+      col += texture2D(uTex, uv, 1.5 + 5.*tt).rgb * (uRefl * fres * e.x * e.y / (1. + 3.*tt));       // blurrier and fainter with distance
+    }
+  }
   col = mix(col, uBg, smoothstep(2.2, 7.5, length(vW.xz)));
   gl_FragColor = vec4(col,1.);
 }`);
@@ -280,8 +308,8 @@ const BLACK = [0.012, 0.012, 0.014], HOUSING = [0.085, 0.085, 0.095], ALU = [0.3
 const led = { c: [0, PY - PH / 2 - 0.004, 0.004], s: [0.022, 0.004, 0.006], col: BLACK, sh: 8, sp: 0, emis: [0, 0, 0] };
 const parts = [
   { c: [0, -0.01, 0], s: [18, 0.02, 18], col: [0.16, 0.15, 0.145], sh: 30, sp: 0.05 },                       // floor
-  { c: [0, TOP / 2 + 0.03, -0.02], s: [2.0, TOP - 0.06, 0.44], col: [0.30, 0.2, 0.125], sh: 40, sp: 0.12 },  // console body
-  { c: [0, TOP - 0.01, -0.02], s: [2.06, 0.02, 0.48], col: [0.36, 0.245, 0.155], sh: 60, sp: 0.2 },          // console top
+  { c: [0, TOP / 2 + 0.02, -0.02], s: [2.0, TOP - 0.08, 0.44], col: [0.30, 0.2, 0.125], sh: 40, sp: 0.12 },  // console body, stopping under the top slab
+  { c: [0, TOP - 0.01, -0.02], s: [2.06, 0.02, 0.48], col: [0.36, 0.245, 0.155], sh: 60, sp: 0.2, refl: 0.55 },  // console top, lacquered
   { c: [-0.9, 0.03, -0.02], s: [0.06, 0.06, 0.4], col: BLACK, sh: 20, sp: 0.1 },                             // console feet
   { c: [0.9, 0.03, -0.02], s: [0.06, 0.06, 0.4], col: BLACK, sh: 20, sp: 0.1 },
   { c: [0, 0.27, 0.201], s: [0.004, 0.42, 0.002], col: [0.12, 0.08, 0.05], sh: 8, sp: 0 },                   // door gap
@@ -290,7 +318,7 @@ const parts = [
   { c: [0, PY - PH / 2 + 0.47, -0.016], s: [1.19, 0.02, 0.02], col: HOUSING, sh: 25, sp: 0.15 },             // housing taper
   { c: [0, PY - PH / 2 + 0.25, -0.0465], s: [0.3, 0.2, 0.001], col: [0.03, 0.03, 0.033], sh: 20, sp: 0.1 },  // VESA plate
   { c: [0, TOP + 0.105, -0.061], s: [0.36, 0.19, 0.03], col: ALU, sh: 70, sp: 0.5 },                         // stand neck
-  { c: [0, TOP + 0.006, -0.02], s: [0.475, 0.012, 0.23], col: ALU, sh: 90, sp: 0.6 },                        // stand plate
+  { c: [0, TOP + 0.006, -0.02], s: [0.475, 0.012, 0.23], col: ALU, sh: 90, sp: 0.6, refl: 0.4 },             // stand plate
   { c: [0, PY, -0.0062], s: [PW - 0.004, PH - 0.004, 0.001], col: [0.06, 0.06, 0.068], sh: 30, sp: 0.2 },                // rear skin
   led,
 ];
@@ -345,14 +373,27 @@ function togglePower() { powered = !powered; if (powered) { powerAt = nowT; swit
 document.getElementById('prev').onclick = () => tune(-1);
 document.getElementById('next').onclick = () => tune(1);
 document.getElementById('power').onclick = togglePower;
+const soundBtn = document.getElementById('sound');
+function toggleSound() {                     // browsers only allow audio to start from a click or key press, so sound begins off
+  if (!soundToggle()) { soundBtn.textContent = 'No audio'; return; }
+  soundBtn.textContent = snd.on ? 'Sound: on' : 'Sound: off'; soundBtn.setAttribute('aria-pressed', snd.on); snd.osdAt = nowT;
+}
+function volume(d) { snd.vol = Math.max(0, Math.min(1, Math.round((snd.vol + d) * 10) / 10)); snd.osdAt = nowT; }
+soundBtn.onclick = toggleSound;
+document.getElementById('voldn').onclick = () => volume(-0.1);
+document.getElementById('volup').onclick = () => volume(0.1);
 addEventListener('keydown', e => {
   if (e.key === 'ArrowRight' || e.key === 'ArrowUp') tune(1);
   else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') tune(-1);
   else if (e.key === 'p' || e.key === 'P') togglePower();
+  else if (e.key === 'm' || e.key === 'M') toggleSound();
+  else if (e.key === '-' || e.key === '_') volume(-0.1);
+  else if (e.key === '=' || e.key === '+') volume(0.1);
   else if (/^[1-9]$/.test(e.key) && +e.key <= CHANNELS.length && powered) { channel = +e.key - 1; switchedAt = nowT; label(); }
 });
 label();
 
+/*SOUND*/
 /* ───────────────────────── Frame loop ───────────────────────── */
 const glow = [0, 0, 0]; let frameNo = 0;
 function resize() {
@@ -375,11 +416,17 @@ function frame(ms) {
   const dist = cam.dist * Math.max(1, 0.92 / asp);          // keep the set in frame on portrait screens
   const eye = [cam.target[0] + dist * cp * Math.sin(cam.yaw), cam.target[1] + dist * Math.sin(cam.pitch), cam.target[2] + dist * cp * Math.cos(cam.yaw)];
   const vp = mul(perspective(0.7, asp, 0.05, 60), lookAt(eye, cam.target));
+  soundFrame(nowT, eye);
 
   gl.viewport(0, 0, canvas.width, canvas.height);
   gl.clearColor(BG[0], BG[1], BG[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
+
+  // the picture goes to the GPU first: the boxes reflect it, then it is drawn on the panel
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scr);
+  if (GL2) gl.generateMipmap(gl.TEXTURE_2D);
 
   // boxes
   let u = boxProg.u;
@@ -389,10 +436,10 @@ function frame(ms) {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cube.idx);
   gl.uniformMatrix4fv(u.uVP, false, vp);
   gl.uniform3fv(u.uEye, eye); gl.uniform3fv(u.uGlow, glow); gl.uniform3fv(u.uBg, BG);
-  gl.uniform4f(u.uRect, SX0, SY0, SX1, SY1);
+  gl.uniform4f(u.uRect, SX0, SY0, SX1, SY1); gl.uniform1i(u.uTex, 0);
   for (const p of parts) {
     gl.uniform3fv(u.uC, p.c); gl.uniform3fv(u.uS, p.s); gl.uniform3fv(u.uColor, p.col);
-    gl.uniform1f(u.uShine, p.sh); gl.uniform1f(u.uSpec, p.sp); gl.uniform3fv(u.uEmis, p.emis || [0, 0, 0]);
+    gl.uniform1f(u.uShine, p.sh); gl.uniform1f(u.uSpec, p.sp); gl.uniform3fv(u.uEmis, p.emis || [0, 0, 0]); gl.uniform1f(u.uRefl, p.refl || 0);
     gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
   }
 
@@ -401,9 +448,6 @@ function frame(ms) {
   gl.useProgram(scrProg.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scr);
-  if (GL2) gl.generateMipmap(gl.TEXTURE_2D);
   gl.uniformMatrix4fv(u.uVP, false, vp); gl.uniform3fv(u.uEye, eye); gl.uniform1i(u.uTex, 0);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 

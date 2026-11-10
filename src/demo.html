@@ -28,6 +28,7 @@
   #screen { width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; }
   .transport { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .transport input[type=range] { flex: 1 1 220px; min-width: 160px; accent-color: var(--accent); }
+  #snd { min-width: 6.4em; }
   .tc { font: 500 13px var(--data); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
   button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; cursor: pointer; }
   button:hover { border-color: var(--muted); }
@@ -61,13 +62,14 @@
 <main>
   <header>
     <h1>Presenter Lip-Sync Demo</h1>
-    <p>One presenter from DevOps Tonight at a time, full frame, so the mouth movement can be judged on its own. Slow it down, step a frame at a time, or switch to the mouth close-up.</p>
+    <p>One presenter from DevOps Tonight at a time, full frame, so the mouth movement can be judged against the voice. Turn sound on, slow it down, step a frame at a time, or switch to the mouth close-up.</p>
   </header>
   <div class="stage">
     <div class="col">
       <canvas id="screen" width="1024" height="576" aria-label="Presenter video"></canvas>
       <div class="transport">
         <button id="play" type="button">Pause</button>
+        <button id="snd" type="button" aria-pressed="false">Sound: off</button>
         <button id="back" type="button" aria-label="Back one frame">◀ frame</button>
         <button id="fwd" type="button" aria-label="Forward one frame">frame ▶</button>
         <input id="scrub" type="range" min="0" max="1000" value="0" step="1" aria-label="Position">
@@ -84,7 +86,7 @@
           <span><i style="background: var(--lips)"></i>Lip shape, spread above the line and rounded below</span>
         </div>
       </div>
-      <p class="note">Keys: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> step one frame, <kbd>1</kbd>–<kbd>5</kbd> choose a presenter. Click the curves to jump within the line. There is no audio; the mouth follows each line's pronunciation. The presenters are AI-generated stills and none is a real person.</p>
+      <p class="note">Keys: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> step one frame, <kbd>1</kbd>–<kbd>5</kbd> choose a presenter. Click the curves to jump within the line. Sound starts off because browsers need a click first. At half and quarter speed the voice slows and drops in pitch. The voices are synthetic, the presenters are AI-generated stills, and none is a real person.</p>
     </div>
     <div class="col">
       <div class="card"><h2>Presenter</h2><div class="people" id="people"></div></div>
@@ -109,6 +111,7 @@ const SW = 1024, SH = 576, scr = document.getElementById('screen'), c = scr.getC
 const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', MONO = '"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace';
 let switchedAt = -10;
 /*NEWS*/
+/*SOUND*/
 /* ───────────────────────── Demo ───────────────────────── */
 const ORDER = ['paige', 'cy', 'dee', 'sunny', 'mel'], GAP = 0.45, FPS = 30;
 const st = { who: 'paige', vt: 0, playing: !matchMedia('(prefers-reduced-motion: reduce)').matches, speed: 1, closeup: false, head: true, camera: true, captions: true, grain: true };
@@ -118,7 +121,7 @@ const fmt = t => { const m = Math.floor(t / 60), s = t - m * 60; return String(m
 function where(vt) { let i = L.length - 1; while (i > 0 && starts[i] > vt) i--; return [L[i], vt - starts[i], i]; }
 
 function choose(id) {
-  st.who = id; L = BEATS.filter(b => b.ph && b.who === id); starts = []; total = 0;
+  st.who = id; L = BEATS.filter(b => b.sp && b.who === id); starts = []; total = 0;
   for (const b of L) { starts.push(total); total += b.dur + GAP; }
   st.vt = 0; $('scrub').max = Math.round(total * 1000);
   for (const el of $('people').children) el.setAttribute('aria-pressed', el.dataset.id === id);
@@ -139,7 +142,7 @@ for (const [n, id] of ORDER.entries()) {
 // The show's presenter drawing, with switches for head movement and parallax so the mouth can be judged alone.
 function drawPresenter(id, t, sp, move, zf) {
   const a = ACT[id], f = a.m.face, s = a.m.seed, e = !move ? 0 : sp.on ? 1 : 0.3;
-  compose(a, t, sp);
+  compose(a, t, sp, smileAt(where(st.vt)[0], where(st.vt)[1], id));
   warp(a, e * (1.5 * Math.sin(t * 2.3 + s) + 0.9 * Math.sin(t * 4.1 + s * 2)),
           e * (1.1 * Math.sin(t * 2.7 + s * 1.3) + 0.6 * Math.sin(t * 4.9 + s)) + (move ? sp.nod * 2.3 : 0),
           e * 0.011 * Math.sin(t * 1.7 + s * 0.7));
@@ -147,6 +150,7 @@ function drawPresenter(id, t, sp, move, zf) {
   c.save();
   if (move) { c.translate(f.cx, FH + 260); c.rotate((0.0032 * Math.sin(t * 0.53 + s) + 0.0018 * Math.sin(t * 1.31 + s * 2)) * (0.6 + 0.4 * e)); c.translate(-f.cx, -(FH + 260)); }
   c.translate(f.cx, f.cy); c.scale(zf, zf); c.translate(-f.cx, -f.cy);
+  if (move) { c.translate(0, FH); c.scale(1, 1 + 0.0035 * Math.sin(t * 1.5 + s * 1.9)); c.translate(0, -FH); }
   c.drawImage(a.wf, 0, 0);
   c.restore();
 }
@@ -169,7 +173,7 @@ function render() {
     const vg = c.createRadialGradient(SW / 2, SH / 2, SH * 0.55, SW / 2, SH / 2, SH * 1.05); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.34)'); c.fillStyle = vg; c.fillRect(0, 0, SW, SH);
   }
   if (st.captions) {
-    let n = 0, said = 0; while (said < b.wt.length && b.wt[said] <= bt) n += b.ph[said++][0].length + 1;
+    let n = 0, said = 0; while (said < b.wt.length && b.wt[said] <= bt) n += b.words[said++].length + 1;
     if (n > 0) {
       c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.font = `600 21px ${SANS}`; const ls = lines(b.text, 860); let left = n, y = SH - 28 - ls.length * 27;
       for (const ln of ls) { if (left <= 0) break; const s = ln.slice(0, left), w = c.measureText(s).width, x0 = SW / 2 - c.measureText(ln).width / 2;
@@ -193,12 +197,13 @@ function drawChart() {
   // words and their phonemes
   g.textAlign = 'left'; const end = [-1e9, -1e9];                 // right edge of the last label on each of the two label rows
   b.wt.forEach((t, k) => {
-    const x = X(t), word = b.ph[k][0]; g.strokeStyle = col('--line'); g.beginPath(); g.moveTo(x, 6); g.lineTo(x, H - 34); g.stroke();
+    const x = X(t), word = b.words[k]; g.strokeStyle = col('--line'); g.beginPath(); g.moveTo(x, 6); g.lineTo(x, H - 34); g.stroke();
     g.font = `12px ${SANS}`; const w = g.measureText(word).width, row = x + 3 > end[0] + 5 ? 0 : x + 3 > end[1] + 5 ? 1 : -1;
     if (row < 0) return;
     g.fillStyle = col('--ink'); g.fillText(word, x + 3, row ? H - 9 : H - 24); end[row] = x + 3 + w;
     if (row === 0) {                                              // phonemes sit under the word when the next word leaves room
-      const ph = b.ph[k][1].replace(/\d/g, ''), next = k + 1 < b.wt.length ? X(b.wt[k + 1]) : W - PADR; g.font = `10px ${MONO}`;
+      const t1 = k + 1 < b.wt.length ? b.wt[k + 1] : 1e9, next = k + 1 < b.wt.length ? X(b.wt[k + 1]) : W - PADR; g.font = `10px ${MONO}`;
+      const ph = b.sp.seg.filter(q => q[1] + LEAD >= t - 0.001 && q[1] + LEAD < t1 - 0.001 && !' ,.:;?!'.includes(q[0])).map(q => q[0]).join('');
       if (g.measureText(ph).width < next - x - 6 && x + 3 > end[1] + 5) { g.fillStyle = col('--muted'); g.fillText(ph, x + 3, H - 9); end[1] = x + 3 + g.measureText(ph).width; }
     }
   });
@@ -227,6 +232,11 @@ chart.addEventListener('pointermove', e => { if (e.buttons) seekChart(e); });
 /* ── transport ── */
 function setPlaying(v) { st.playing = v; $('play').textContent = v ? 'Pause' : 'Play'; }
 $('play').onclick = () => setPlaying(!st.playing);
+$('snd').onclick = () => {
+  if (!soundToggle()) { $('snd').textContent = 'No audio'; return; }
+  snd.pan.coneInnerAngle = 360; snd.pan.coneOuterAngle = 360;                    // no room here: the voice goes straight to the listener
+  $('snd').textContent = snd.on ? 'Sound: on' : 'Sound: off'; $('snd').setAttribute('aria-pressed', snd.on);
+};
 const step = d => { setPlaying(false); st.vt = clamp(Math.round(st.vt * FPS + d) / FPS, 0, total - 0.001); };
 $('back').onclick = () => step(-1); $('fwd').onclick = () => step(1);
 $('scrub').oninput = e => { st.vt = e.target.value / 1000; };
@@ -246,7 +256,11 @@ function tick(ms) {
   if (pending > 0) { c.fillStyle = '#000'; c.fillRect(0, 0, SW, SH); c.fillStyle = '#fff'; c.font = `18px ${SANS}`; c.textAlign = 'center'; c.fillText('Loading pictures…', SW / 2, SH / 2); requestAnimationFrame(tick); return; }
   if (st.playing) st.vt = (st.vt + dt * st.speed) % total;
   render(); drawChart();
-  const [, , i] = where(st.vt);
+  const [b, bt, i] = where(st.vt);
+  if (snd.ac && snd.on) {                      // keep the recording locked to the playhead, at the playback speed
+    sndTo(snd.master, 0.85, 0.05);
+    if (st.playing && snd.ready) sndPlay('cur', b.ai, snd.bufs[b.ai], snd.chain[sndVoiceKind(b)], bt - LEAD + sndLatency() * st.speed, st.speed); else sndStop('cur');
+  }
   $('tc').textContent = fmt(st.vt) + ' / ' + fmt(total);
   if (document.activeElement !== $('scrub')) $('scrub').value = Math.round(st.vt * 1000);
   for (const el of $('lines').children) el.setAttribute('aria-pressed', +el.dataset.i === i);

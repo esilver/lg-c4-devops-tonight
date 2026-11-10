@@ -8,6 +8,7 @@ const { chromium } = require('playwright'); const fs = require('fs');
   await p.goto('file://' + __dirname + '/../demo/index.html');
   await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0, null, { timeout: 30000 }); await p.waitForTimeout(500);
   const total = await p.evaluate(who => { choose(who); setPlaying(false); window.__combo = document.createElement('canvas'); __combo.width = 2048; __combo.height = 576; return total; }, who);
+  fs.writeFileSync(`${dir}/timing.json`, JSON.stringify(await p.evaluate(() => ({ len: total, lead: LEAD, beats: L.map((b, i) => ({ ai: b.ai, start: starts[i], dur: b.dur })) }))));
   const n = Math.floor(total * 30);
   for (let i = 0; i < n; i++) {
     const url = await p.evaluate(t => { const x = __combo.getContext('2d'); st.vt = t; st.closeup = false; render(); x.drawImage(scr, 0, 0); st.closeup = true; st.captions = false; render(); x.drawImage(scr, 1024, 0); st.captions = true; st.closeup = false; return __combo.toDataURL('image/jpeg', 0.93); }, i / 30);

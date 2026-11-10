@@ -11,7 +11,7 @@ const { chromium } = require('playwright');
     const url = await p.evaluate(t => { readyAt = 0; switchedAt = -10; c.save(); chNews(t); c.restore(); return scr.toDataURL('image/jpeg', 0.9); }, t0 + i * step);
     require('fs').writeFileSync(`${pre}${i}.jpg`, Buffer.from(url.split(',')[1], 'base64'));
   }
-  const curves = await p.evaluate(() => BEATS.filter(b => b.ph).map(b => { const o = []; for (let t = 0; t < b.dur; t += 1 / 60) o.push(+speechAt(b, t, b.who).o.toFixed(3)); return { who: b.who, dur: +b.dur.toFixed(2), syl: b.stress.length, o }; }));
+  const curves = await p.evaluate(() => BEATS.filter(b => b.sp).map(b => { const o = [], s = []; for (let t = 0; t < b.dur; t += 1 / 60) { const q = speechAt(b, t, b.who); o.push(+q.o.toFixed(3)); s.push(+q.s.toFixed(3)); } return { who: b.who, dur: +b.dur.toFixed(2), syl: b.stress.length, o, s, wt: b.wt, words: b.words, stress: b.stress }; }));
   require('fs').writeFileSync('curves.json', JSON.stringify(curves));
   console.log('errors:', errs); await b.close();
 })();

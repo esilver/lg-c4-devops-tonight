@@ -1,10 +1,11 @@
 /* ── DevOps Tonight: photographic stills, brought to life in plain JavaScript ──
    Every frame is composited here: a background plate, a cut-out presenter, mouth and eye poses
    blended from a small set of renders of the same face, a head warp, camera moves, grain and graphics.
-   Speech drives the mouth: each line carries its pronunciation, which becomes smooth jaw and lip curves. */
+   Speech drives the mouth: each line carries a recording and the timing of every sound in it, which become
+   smooth jaw and lip curves, so the lips move with the voice. */
 const ACC = '#2ee6a6';
 const ASSETS = /*ASSETS*/{ img: {}, cast: {} };
-const SPOKEN = /*PHON*/[];            // per spoken line: [caption word, phonemes with stress marks]
+const SPEECH = /*SPEECH*/[];         // per spoken line: the audio, caption words with start times, every phoneme with start, length, loudness
 const FW = 1024, FH = 576;
 const CAST = {
   paige: { name: 'PAIGE DUTY', role: 'Anchor · on call tonight' },
@@ -15,38 +16,41 @@ const CAST = {
 };
 const SHOW = [
   { intro: 5 },
-  { who: 'paige', text: "Good evening, this is DevOps Tonight. I'm Paige Duty, and yes, I am on call." },
-  { who: 'cy', text: "And I'm Cy Dekar. It is 2026, and production is, for the moment, up." },
+  { who: 'paige', sm: [['paige', 0.9, 1]], text: "Good evening, this is DevOps Tonight. I'm Paige Duty, and yes, I am on call." },
+  { who: 'cy', sm: [['cy', 0.9, 1]], text: "And I'm Cy Dekar. It is 2026, and production is, for the moment, up." },
   { who: 'paige', ots: ['office', 'AGENTS REVIEW AGENTS'], cuts: [[16, null, 'paged']], text: 'Our top story: an AI agent opened forty pull requests overnight. A second agent approved them. A human is now being paged.' },
   { who: 'cy', ots: ['dcext', 'FRIDAY DEPLOY'], text: 'Meanwhile, a routine Friday deploy is under way in us-east-1. Dee Ploy is at the scene. Dee?' },
   { who: 'dee', live: 'us-east-1', cuts: [[0, 2, 'dcext']], text: 'Thanks, Cy. The pipeline behind me has been green for nine minutes, and nobody here trusts it.' },
   { who: 'dee', live: 'us-east-1', cuts: [[0, 10, 'servers']], text: 'Engineers have checked the dashboards, the rollback plan, and DNS. Sources say it is always DNS.' },
   { who: 'cy', split: ['cy', 'dee'], title: 'LIVE · us-east-1', text: 'Dee, did anyone suggest waiting until Monday?' },
-  { who: 'dee', split: ['cy', 'dee'], title: 'LIVE · us-east-1', text: 'One person did, Cy. They have been moved to the platform team. Back to you.' },
-  { who: 'paige', ots: ['sat', 'CLOUD FORECAST'], text: 'Brave work. Now the cloud forecast, with Sunny Uptime.' },
-  { who: 'sunny', wx: 0, text: 'Thanks, Paige. Pods are stuck Pending across the north while the autoscaler thinks about it.' },
+  { who: 'dee', split: ['cy', 'dee'], title: 'LIVE · us-east-1', sm: [['cy', 0.6, 1]], text: 'One person did, Cy. They have been moved to the platform team. Back to you.' },
+  { who: 'paige', ots: ['sat', 'CLOUD FORECAST'], sm: [['paige', 0, 0.16]], text: 'Brave work. Now the cloud forecast, with Sunny Uptime.' },
+  { who: 'sunny', wx: 0, sm: [['sunny', 0, 0.1]], text: 'Thanks, Paige. Pods are stuck Pending across the north while the autoscaler thinks about it.' },
   { who: 'sunny', wx: 1, text: 'In the south, scattered 503s with a chance of retries. Four nines along the coast, and a high of nine thousand dollars in egress.' },
   { who: 'cy', split: ['cy', 'mel'], title: 'THE BIG INTERVIEW', text: 'Joining us is Y. A. Mel, Staff YAML Engineer. With agents writing the config now, is your job safe?' },
   { who: 'mel', split: ['cy', 'mel'], title: 'THE BIG INTERVIEW', text: 'Cy, the agent writes four thousand lines of YAML a day. Someone still has to find the one wrong indent.' },
   { who: 'cy', split: ['cy', 'mel'], title: 'THE BIG INTERVIEW', text: 'Chilling. Thank you for your time.' },
-  { who: 'paige', text: "That's all for tonight. Remember: you build it, you run it, and FinOps will ask what it cost." },
-  { who: 'cy', text: 'From all of us in the control plane, good night, and may your pager stay quiet.' },
+  { who: 'paige', sm: [['paige', 0.92, 1]], text: "That's all for tonight. Remember: you build it, you run it, and FinOps will ask what it cost." },
+  { who: 'cy', sm: [['cy', 0.9, 1]], text: 'From all of us in the control plane, good night, and may your pager stay quiet.' },
   { outro: 4.5 },
 ];
-// Speech. Each phoneme has a mouth target: [jaw open 0..1 (negative = lips pressed), lip shape -1 round .. +1 spread,
-// how firmly it holds its opening, how firmly it holds its shape, typical length in ms, second target for diphthongs].
-const PHON = {
-  AA: [.85, 0, 1, .6, 120], AE: [.74, .35, 1, .8, 120], AH: [.5, 0, 1, .5, 90], AO: [.62, -.5, 1, 1, 120], EH: [.5, .4, 1, .8, 95],
-  ER: [.3, -.45, 1, .9, 110], IH: [.32, .5, 1, .8, 80], IY: [.24, .9, 1, 1, 115], UH: [.26, -.75, 1, 1, 85], UW: [.2, -1, 1, 1, 115],
-  AW: [.75, .1, 1, .7, 150, [.25, -.9]], AY: [.78, .05, 1, .7, 150, [.3, .7]], EY: [.46, .5, 1, .9, 140, [.26, .8]],
-  OW: [.5, -.6, 1, 1, 140, [.22, -1]], OY: [.55, -.7, 1, 1, 150, [.28, .7]],
-  P: [-.12, 0, 1, .15, 75], B: [-.12, 0, 1, .15, 70], M: [-.12, 0, 1, .15, 75], F: [.07, .2, .9, .5, 80], V: [.07, .2, .9, .5, 65],
-  W: [.14, -1, .7, 1, 60], R: [.22, -.5, .5, .7, 55], L: [.32, .1, .35, .3, 55], Y: [.2, .7, .5, .7, 45],
-  T: [.13, .3, .6, .4, 55], D: [.13, .3, .6, .4, 50], N: [.13, .3, .55, .4, 55], S: [.1, .35, .7, .5, 80], Z: [.1, .35, .7, .5, 65],
-  TH: [.2, .15, .6, .3, 70], DH: [.2, .15, .5, .3, 40], SH: [.2, -.55, .7, .9, 85], ZH: [.2, -.55, .7, .9, 70], CH: [.2, -.55, .7, .9, 90], JH: [.2, -.55, .7, .9, 80],
-  K: [.3, 0, .25, .1, 65], G: [.3, 0, .25, .1, 60], NG: [.25, 0, .3, .1, 60], HH: [.35, 0, .2, .1, 50],
+const ease = p => p * p * (3 - 2 * p), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Speech. Each sound has a mouth target: [jaw open 0..1 (negative = lips pressed), lip shape -1 round .. +1 spread,
+// how firmly it holds its opening, how firmly it holds its shape, second target for diphthongs]. The symbols are the
+// phoneme alphabet of the speech model that voiced the lines (capital letters are diphthongs, T is a flapped t).
+const VIS = {
+  'ɑ': [.85, 0, 1, .6], 'æ': [.74, .35, 1, .8], 'a': [.78, .2, 1, .7], 'ʌ': [.5, 0, 1, .5], 'ɔ': [.62, -.5, 1, 1], 'ɒ': [.66, -.35, 1, .9], 'ɛ': [.5, .4, 1, .8],
+  'ɜ': [.3, -.45, 1, .9], 'ɪ': [.32, .5, 1, .8], 'i': [.24, .9, 1, 1], 'ʊ': [.26, -.75, 1, 1], 'u': [.2, -1, 1, 1],
+  'ə': [.3, 0, .8, .4], 'ɐ': [.36, 0, .8, .4], 'ᵊ': [.2, 0, .5, .3], 'ᵻ': [.26, .4, .8, .6],
+  'A': [.46, .5, 1, .9, [.26, .8]], 'I': [.78, .05, 1, .7, [.3, .7]], 'W': [.75, .1, 1, .7, [.25, -.9]], 'Y': [.55, -.7, 1, 1, [.28, .7]],
+  'O': [.5, -.6, 1, 1, [.22, -1]], 'Q': [.4, -.2, 1, .8, [.22, -1]],
+  'p': [-.12, 0, 1, .15], 'b': [-.12, 0, 1, .15], 'm': [-.12, 0, 1, .15], 'f': [.07, .2, .9, .5], 'v': [.07, .2, .9, .5], 'w': [.14, -1, .7, 1],
+  'ɹ': [.22, -.5, .5, .7], 'l': [.32, .1, .35, .3], 'j': [.2, .7, .5, .7], 't': [.13, .3, .6, .4], 'd': [.13, .3, .6, .4], 'n': [.13, .3, .55, .4], 'T': [.2, .2, .3, .2],
+  's': [.1, .35, .7, .5], 'z': [.1, .35, .7, .5], 'θ': [.2, .15, .6, .3], 'ð': [.2, .15, .5, .3], 'ʃ': [.2, -.55, .7, .9], 'ʒ': [.2, -.55, .7, .9],
+  'ʧ': [.2, -.55, .7, .9], 'ʤ': [.2, -.55, .7, .9], 'k': [.3, 0, .25, .1], 'ɡ': [.3, 0, .25, .1], 'ŋ': [.25, 0, .3, .1], 'h': [.35, 0, .2, .1], 'ʔ': [.2, 0, .3, .1],
 };
-const RATE = 1.05, frac = v => v - Math.floor(v), hash = (a, b) => frac(Math.sin(a * 12.9898 + b * 78.233) * 43758.5453);
+const FULL = 'ɑæaʌɔɒɛɜɪiʊuAIWYOQ', WEAK = 'əɐᵊᵻ', LEAD = 0.25, TAIL = 0.3;        // LEAD: the recording starts this long into its line
+const frac = v => v - Math.floor(v), hash = (a, b) => frac(Math.sin(a * 12.9898 + b * 78.233) * 43758.5453);
 // Monotone cubic interpolation: the curve glides through every target without overshooting.
 function slopes(T, Y) {
   const n = T.length, d = [], m = new Array(n).fill(0);
@@ -61,38 +65,43 @@ function curve(T, Y, M, t) {
   return (2 * u3 - 3 * u2 + 1) * Y[lo] + (u3 - 2 * u2 + u) * h * M[lo] + (3 * u2 - 2 * u3) * Y[hi] + (u3 - u2) * h * M[hi];
 }
 function buildSpeech(b) {
-  const segs = []; let t = 0.3; b.wt = []; b.stress = [];
-  const add = (o, s, wo, ws, d, hold) => { segs.push({ t0: t, d, o, s, wo, ws, hold }); t += d; };
-  b.ph.forEach(([word, ph], wi) => {
-    b.wt.push(t);
-    const pause = /[.?!:]$/.test(word) ? 0.42 : /[,;]$/.test(word) ? 0.22 : 0, fin = pause ? 1.2 : 1;      // phrase-final words stretch a little
-    const amp = 0.88 + 0.24 * hash(wi, b.start);                                                           // and every word lands a bit differently
-    for (const p of ph.split(' ')) {
-      const st = /\d$/.test(p) ? +p.slice(-1) : -1, k = PHON[st < 0 ? p : p.slice(0, -1)];
-      const d = k[4] / 1000 * (st === 0 ? 0.62 : st === 2 ? 0.9 : 1) * fin * RATE, ok = st < 0 ? 1 : (st === 0 ? 0.58 : st === 2 ? 0.86 : 1) * amp;
-      if (st === 1) b.stress.push([t + d * 0.4, (amp - 0.88) / 0.24]);
-      if (k[5]) { add(k[0] * ok, k[1], k[2], k[3], d * 0.55); add(k[5][0] * ok, k[5][1], 0.9, k[3], d * 0.45); }
-      else add(k[0] < 0 ? k[0] : k[0] * ok, k[1], k[2], k[3], d, k[0] < 0);
-    }
-    if (pause) add(0, 0, 1, 1, pause, true);
-  });
+  const sp = b.sp, segs = []; b.words = sp.words.map(w => w[0]); b.wt = sp.words.map(w => w[1] + LEAD); b.stress = [];
+  let st = 0, carry = 0;                                         // stress of the coming vowel; time taken by its stress mark
+  const add = (t0, d, o, s, wo, ws, hold) => segs.push({ t0, d, o, s, wo, ws, hold });
+  for (const [ch, at, len, loud] of sp.seg) {
+    if (ch === 'ˈ' || ch === 'ˌ') { st = ch === 'ˈ' ? 1 : 2; carry += len; continue; }
+    if (ch === ' ') continue;                                    // word gaps: time simply passes
+    const t0 = at - carry + LEAD, d = len + carry, k = VIS[ch]; carry = 0;
+    if (ch === 'ː') { if (segs.length) segs[segs.length - 1].d += d; continue; }                // a length mark stretches the vowel before it
+    if (!k) { if (d > 0) add(t0, d, 0, 0, 1, 1, true); st = 0; continue; }                      // punctuation is a pause
+    if (d <= 0) continue;
+    if (FULL.includes(ch) || WEAK.includes(ch)) {
+      // louder syllables open wider; unstressed ones are reduced
+      const amp = (WEAK.includes(ch) ? 0.85 : st === 1 ? 1 : st === 2 ? 0.86 : 0.62) * clamp(0.72 + 0.36 * loud, 0.6, 1.3);
+      if (st === 1) b.stress.push([t0 + d * 0.4, clamp(0.55 * (loud - 0.7) / 0.8 + 0.45 * hash(segs.length, b.start), 0, 1)]);
+      if (k[4]) { add(t0, d * 0.55, k[0] * amp, k[1], k[2], k[3]); add(t0 + d * 0.55, d * 0.45, k[4][0] * amp, k[4][1], 0.9, k[3]); }
+      else add(t0, d, k[0] * amp, k[1], k[2], k[3]);
+      st = 0;
+    } else add(t0, d, k[0], k[1], k[2], k[3], k[0] < 0);
+  }
   // Coarticulation: a weakly articulated sound takes most of its shape from its neighbours.
-  const T = [0, 0.04, 0.2], O = [0, 0, 0.07], S = [0, 0, 0];            // lips part for a breath just before the first word
+  const first = segs[0].t0, T = [0, Math.max(0.02, first - 0.22), Math.max(0.04, first - 0.06)], O = [0, 0, 0.07], S = [0, 0, 0];   // lips part for a breath
   segs.forEach((g, i) => {
     const nb = (k, w) => { let n = 0, dn = 0; for (const q of [segs[i - 1], segs[i + 1]]) if (q) { n += q[k] * q[w]; dn += q[w]; } return dn ? n / dn : g[k]; };
     const o = g.wo * g.o + (1 - g.wo) * nb('o', 'wo'), sh = g.ws * g.s + (1 - g.ws) * nb('s', 'ws');
-    if (g.hold) { T.push(g.t0 + g.d * 0.3, g.t0 + g.d * 0.78); O.push(o, o); S.push(sh, sh); } else { T.push(g.t0 + g.d * 0.45); O.push(o); S.push(sh); }
+    if (g.hold && g.d > 0.1) { T.push(g.t0 + g.d * 0.3, g.t0 + g.d * 0.78); O.push(o, o); S.push(sh, sh); } else { T.push(g.t0 + g.d * (g.hold ? 0.5 : 0.45)); O.push(o); S.push(sh); }
   });
-  T.push(t + 0.16); O.push(0); S.push(0);
-  b.kT = T; b.kO = O; b.kS = S; b.mO = slopes(T, O); b.mS = slopes(T, S); b.t0 = segs[0].t0; b.t1 = t; b.dur = t + 0.4;
-  b.text = b.ph.map(w => w[0]).join(' ');
+  const end = LEAD + sp.len; T.push(Math.max(end, T[T.length - 1] + 0.05) + 0.12); O.push(0); S.push(0);
+  for (let i = 1; i < T.length; i++) if (T[i] <= T[i - 1]) T[i] = T[i - 1] + 0.004;            // keep the keyframes in order
+  b.kT = T; b.kO = O; b.kS = S; b.mO = slopes(T, O); b.mS = slopes(T, S); b.t0 = first; b.t1 = end; b.dur = end + TAIL;
+  b.text = b.words.join(' ');
 }
 const BEATS = []; let SHOW_LEN = 0; const seen = {}; let phi = 0;
 SHOW.forEach(L => {
   const b = Object.assign({ start: SHOW_LEN }, L);
   if (L.text && !L.split) { b.strap = !seen[L.who]; seen[L.who] = true; }      // name strap the first time someone is on camera
   if (L.text) {
-    b.ph = SPOKEN[phi++] || L.text.split(' ').map(w => [w, 'AH1']); buildSpeech(b);
+    b.ai = phi; b.sp = SPEECH[phi++]; buildSpeech(b);
     b.kind = L.split ? 'split' + L.split.join() : L.wx != null ? 'wx' : 'solo' + L.who;
   } else { b.dur = L.intro || L.outro; b.kind = L.intro ? 'intro' : 'outro'; }
   const p = BEATS[BEATS.length - 1];
@@ -111,7 +120,7 @@ const ACT = {};
 for (const k in ASSETS.cast) {
   const m = ASSETS.cast[k], pf = mkCanvas(FW, FH), wf = mkCanvas(FW, FH);
   ACT[k] = { m, bg: loadImg(m.bg), fg: loadImg(m.fg), pf, px: pf.getContext('2d'), wf, wx: wf.getContext('2d'),
-    mN: m.mouth.n.map(loadImg), mE: m.mouth.e.map(loadImg), mW: m.mouth.w.map(loadImg), mP: loadImg(m.mouth.p),
+    mN: m.mouth.n.map(loadImg), mE: m.mouth.e.map(loadImg), mW: m.mouth.w.map(loadImg), mP: loadImg(m.mouth.p), mS: m.mouth.s ? loadImg(m.mouth.s) : null,
     eHalf: loadImg(m.eyes.half), eClosed: loadImg(m.eyes.closed), eBrow: loadImg(m.eyes.brow) };
 }
 const grain = mkCanvas(256, 256);
@@ -136,7 +145,6 @@ function lines(text, maxW) {
   for (const w of text.split(' ')) { if (line && c.measureText(line + ' ' + w).width > maxW) { out.push(line); line = w; } else line = line ? line + ' ' + w : w; }
   out.push(line); return out;
 }
-const ease = p => p * p * (3 - 2 * p), clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wob = (t, s) => Math.sin(t * 1.3 + s) * 0.6 + Math.sin(t * 2.9 + s * 1.7) * 0.3 + Math.sin(t * 5.1 + s * 0.3) * 0.1;
 
 /* ── speech state at a moment of a line ── */
@@ -173,9 +181,12 @@ function blinkAt(t, seed) {                                   // irregular blink
   }
   return b;
 }
-function compose(a, t, sp) {
+function compose(a, t, sp, sm) {
   const x = a.px, m = a.m; x.globalAlpha = 1; x.clearRect(0, 0, FW, FH); x.drawImage(a.fg, 0, 0);
-  if (sp && (Math.abs(sp.o) > 0.004 || Math.abs(sp.s) > 0.02)) mix(x, mouthLayers(a, sp.o, sp.s), m.mouth.x, m.mouth.y);
+  const o = sp ? sp.o : 0, sh = sp ? sp.s : 0, layers = Math.abs(o) > 0.004 || Math.abs(sh) > 0.02 ? mouthLayers(a, o, sh) : [];
+  const grin = a.mS ? (sm || 0) * clamp(1 - 5 * Math.max(0, o), 0, 1) : 0;         // a smile gives way as the mouth opens to speak
+  if (grin > 0.01) { for (const l of layers) l[1] *= 1 - grin; layers.push([a.mS, grin]); }
+  if (layers.length) mix(x, layers, m.mouth.x, m.mouth.y);
   const b = blinkAt(t, m.seed), br = sp ? sp.brow * 0.85 * (1 - Math.min(1, 2 * b)) : 0;
   if (b > 0 || br > 0.01) mix(x, [[a.eBrow, br], [a.eHalf, b <= 0.5 ? 2 * b : 2 - 2 * b], [a.eClosed, Math.max(0, 2 * b - 1)]], m.eyes.x, m.eyes.y);
 }
@@ -192,10 +203,10 @@ function warp(a, tx, ty, rot) {
     }
   }
 }
-// Draws in frame coordinates (the caller sets the camera). o: { sp (speech state or null), zb, zf, noBg, mid() }
+// Draws in frame coordinates (the caller sets the camera). o: { sp (speech state or null), sm (smile 0..1), zb, zf, noBg, mid() }
 function drawActor(id, t, o) {
   const a = ACT[id], f = a.m.face, s = a.m.seed, e = o.sp && o.sp.on ? 1 : 0.3;
-  compose(a, t, o.sp);
+  compose(a, t, o.sp, o.sm);
   warp(a, e * (1.5 * Math.sin(t * 2.3 + s) + 0.9 * Math.sin(t * 4.1 + s * 2)),
           e * (1.1 * Math.sin(t * 2.7 + s * 1.3) + 0.6 * Math.sin(t * 4.9 + s)) + (o.sp ? o.sp.nod * 2.3 : 0),
           e * 0.011 * Math.sin(t * 1.7 + s * 0.7));
@@ -204,6 +215,7 @@ function drawActor(id, t, o) {
   c.save();
   c.translate(f.cx, FH + 260); c.rotate((0.0032 * Math.sin(t * 0.53 + s) + 0.0018 * Math.sin(t * 1.31 + s * 2)) * (0.6 + 0.4 * e)); c.translate(-f.cx, -(FH + 260));
   c.translate(f.cx, f.cy); c.scale(o.zf, o.zf); c.translate(-f.cx, -f.cy);
+  c.translate(0, FH); c.scale(1, 1 + 0.0035 * Math.sin(t * 1.5 + s * 1.9)); c.translate(0, -FH);       // breathing: the body rises and settles
   c.drawImage(a.wf, 0, 0);
   c.restore();
 }
@@ -232,7 +244,7 @@ function paneCrop(a, w, h) {
 }
 function pane(x, y, w, h, id, b, t, bt, remote) {
   const a = ACT[id], on = b.who === id, k = paneCrop(a, w, h);
-  view(x, y, w, h, k[0], k[1], k[2], k[3], () => drawActor(id, t, { sp: on ? speechAt(b, bt, id) : null, zb: 1, zf: 1.012 }));
+  view(x, y, w, h, k[0], k[1], k[2], k[3], () => drawActor(id, t, { sp: on ? speechAt(b, bt, id) : null, sm: smileAt(b, bt, id), zb: 1, zf: 1.012 }));
   if (remote) {                    // a video call: low resolution, low frame rate
     const tick = Math.floor(t * 15); if (tick !== lofiTick) { lofiTick = tick; lofix.drawImage(scr, x, y, w, h, 0, 0, 231, 170); }
     c.drawImage(lofi, 0, 0, 231, 170, x, y, w, h);
@@ -258,18 +270,33 @@ function weatherIcon(kind, x, y, t) {
   c.restore();
 }
 
+// Smiles: a line may list [who, from, to] as fractions of its length; the smile eases in and, unless it runs to the end, out.
+function smileAt(b, bt, id) {
+  let w = 0;
+  if (b.sm) for (const [who, f0, f1] of b.sm) if (who === id) { const t0 = f0 * b.dur, t1 = f1 * b.dur; w = Math.max(w, ease(clamp((bt - t0) / 0.3, 0, 1)) * (f1 >= 1 ? 1 : 1 - ease(clamp((bt - t1) / 0.35, 0, 1)))); }
+  return w;
+}
+// Cutaways run from one word of a line to another; returns [start, end, still] while one is on screen.
+function cutAt(b, bt) {
+  if (b.cuts) for (const k of b.cuts) { const t0 = k[0] ? b.wt[k[0]] - 0.1 : 0, t1 = k[1] == null ? b.dur : b.wt[k[1]] - 0.1; if (bt >= t0 && bt < t1) return [t0, t1, k[2]]; }
+  return null;
+}
+// Where the bulletin is at time t: the line being spoken and how far into it. The sound engine asks the same question.
+function showAt(t) {
+  if (pending > 0) return null;
+  if (readyAt < 0) readyAt = t;
+  const ts = Math.max(0, t - Math.max(readyAt, switchedAt + 0.32)) % SHOW_LEN;
+  let bi = BEATS.length - 1; while (BEATS[bi].start > ts) bi--;
+  return { b: BEATS[bi], bt: ts - BEATS[bi].start, ts };
+}
 function chNews(t) {
   c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
   if (pending > 0) {              // still decoding the pictures
     c.fillStyle = '#050b1a'; c.fillRect(0, 0, SW, SH); opsLogo(SW / 2 - 40, 210, 80);
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.font = `800 30px ${SANS}`; c.fillText('DEVOPS TONIGHT', SW / 2, 345); return;
   }
-  if (readyAt < 0) readyAt = t;
-  const ts = Math.max(0, t - Math.max(readyAt, switchedAt + 0.32)) % SHOW_LEN;
-  let bi = BEATS.length - 1; while (BEATS[bi].start > ts) bi--;
-  const b = BEATS[bi], bt = ts - b.start, sp = clamp((ts - b.shot0) / b.shotLen, 0, 1);
-  let cut = null;                                             // cutaways run from one word of the line to another
-  if (b.cuts) for (const k of b.cuts) { const t0 = k[0] ? b.wt[k[0]] - 0.1 : 0, t1 = k[1] == null ? b.dur : b.wt[k[1]] - 0.1; if (bt >= t0 && bt < t1) cut = [t0, t1, k[2]]; }
+  const at = showAt(t), b = at.b, bt = at.bt, ts = at.ts, sp = clamp((ts - b.shot0) / b.shotLen, 0, 1);
+  const cut = b.cuts ? cutAt(b, bt) : null;
   const showStrap = !!b.strap;
 
   if (b.intro || b.outro) {
@@ -308,14 +335,14 @@ function chNews(t) {
     }
     const a = ACT.sunny, f = a.m.face, z = a.m.wxScale || 1;
     c.save(); c.translate(250, 250); c.scale(z, z); c.translate(-f.cx, -f.cy);
-    drawActor('sunny', t, { sp: speechAt(b, bt, 'sunny'), noBg: true, zb: 1, zf: 1 });
+    drawActor('sunny', t, { sp: speechAt(b, bt, 'sunny'), sm: smileAt(b, bt, 'sunny'), noBg: true, zb: 1, zf: 1 });
     c.restore();
   } else {
     // a single presenter on camera: slow push-in, parallax between person and set, hand-held when live
     const left = ACT[b.who].m.face.cx > 560, ox = b.ots ? (left ? 46 : -46) : 0;        // make room for the over-the-shoulder box
     const z = (b.ots ? 1.1 : 1.035) + 0.05 * ease(sp), sh = b.live ? 1 : 0.12;
     c.save(); c.translate(SW / 2 + ox + wob(t, 3) * 3.4 * sh, SH / 2 + wob(t, 9) * 2.6 * sh); c.rotate(wob(t * 0.8, 5) * 0.0035 * sh); c.scale(z, z); c.translate(-SW / 2, -SH / 2);
-    drawActor(b.who, t, { sp: speechAt(b, bt, b.who), zb: 1, zf: 1.012 + 0.022 * ease(sp), mid: b.ots ? () => otsBox(b, left) : null });
+    drawActor(b.who, t, { sp: speechAt(b, bt, b.who), sm: smileAt(b, bt, b.who), zb: 1, zf: 1.012 + 0.022 * ease(sp), mid: b.ots ? () => otsBox(b, left) : null });
     c.restore();
   }
 
@@ -345,7 +372,7 @@ function chNews(t) {
       c.fillStyle = '#fff'; c.font = `800 23px ${SANS}`; c.fillText(p.name, 60, 400); c.fillStyle = ACC; c.font = `600 15px ${SANS}`; c.fillText(p.role, 60, 424); c.restore();
     }
     // closed captions, revealed word by word as the line is spoken
-    let n = 0, said = 0; while (said < b.wt.length && b.wt[said] <= bt) n += b.ph[said++][0].length + 1;
+    let n = 0, said = 0; while (said < b.wt.length && b.wt[said] <= bt) n += b.words[said++].length + 1;
     if (n > 0) {
       c.font = `600 21px ${SANS}`; const ls = lines(b.text, 860); let left = n, y = 452;
       for (const ln of ls) { if (left <= 0) break; const s = ln.slice(0, left), w = c.measureText(s).width;

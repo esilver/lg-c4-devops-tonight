@@ -21,7 +21,7 @@ def export(key, idx):
     valid = cv2.warpAffine(np.full((512, 512), 255, np.uint8), A, (W, H), flags=cv2.INTER_NEAREST) > 0
     valid = cv2.erode(valid.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0
     n = toframe("n"); L = aff["levels"]
-    mouth = [f"n{i}" for i in range(1, 6)] + [f"e{i}" for i in range(5)] + [f"w{i}" for i in range(5)] + ["p"]; eyes = ["half", "closed", "brow"]
+    mouth = [f"n{i}" for i in range(1, 6)] + [f"e{i}" for i in range(5)] + [f"w{i}" for i in range(5)] + ["p", "smile"]; eyes = ["half", "closed", "brow"]
     F = {k: toframe(k) for k in mouth + eyes}; yy = np.arange(H)[:, None] * np.ones((1, W)); xx = np.ones((H, 1)) * np.arange(W)[None]
     ell = lambda cy, rx, ry: ((xx - ex) / (rx * iod)) ** 2 + ((yy - ey - cy * iod) / (ry * iod)) ** 2 < 1      # where a region may live, in face units
     def softmask(names, region):
@@ -56,7 +56,7 @@ def export(key, idx):
     bg = Image.fromarray(cv2.cvtColor((plate * (1 - w) + soft * w).astype(np.uint8), cv2.COLOR_BGR2RGB))
     ent = dict(bg=uri(bg, quality=86), fg=uri(fg, "WEBP", quality=88, method=6), seed=round(1.0 + idx * 1.7, 2), gain=GAIN[key],
                face=dict(cx=round(ex, 1), cy=round(ey + 0.45 * iod, 1), iod=round(iod, 1)),
-               mouth=dict(x=mx, y=my, L=L, n=ms[0:5], e=ms[5:10], w=ms[10:15], p=ms[15]), eyes=dict(x=exx, y=eyy, half=es[0], closed=es[1], brow=es[2]))
+               mouth=dict(x=mx, y=my, L=L, n=ms[0:5], e=ms[5:10], w=ms[10:15], p=ms[15], s=ms[16]), eyes=dict(x=exx, y=eyy, half=es[0], closed=es[1], brow=es[2]))
     ent.update(EXTRA.get(key, {}))
     Image.fromarray((np.dstack([Mm, Me, np.zeros_like(Mm)]) * 255).astype(np.uint8)).save(f"{d}/lp/masks.png")
     print(key, "mouth", msz, "eyes", esz, "kB", sum(len(s) for s in ms + es) // 1024, flush=True)

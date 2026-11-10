@@ -72,3 +72,19 @@ These are images, kept in `gen/out/`:
 | `lp_paige.jpg`, `lp_detail.jpg` | First re-posing test; source against neutral render against open jaw |
 | `lp_sweep_paige.jpg` | The 24-pose sweep |
 | `lp_masks_paige.jpg`, `lp_masks_2.jpg` | Sprite regions over the face |
+
+## Added in request 8
+
+| Script | What it does |
+|---|---|
+| `errs.js [page]` | Loads a built page and prints script errors |
+| `sound_check.js [seconds]` | Turns sound on, checks decoding and the delay measurement, logs voice position against the picture clock while the bulletin plays, records the set's output to `rec.webm`, dumps the two pieces of music |
+| `audio_analyse.py` | Finds each line in that recording by correlation and compares with the timeline; reports levels and the strongest pitches in the music |
+| `rec_show.js <dir> [fps]` | Renders every frame of the bulletin's picture, with a timing file |
+| `mux.py <dir> <out.mp4>` | Lays a sound track under rendered frames and encodes a video |
+| `plot_curve.py [line]` | Draws a line's jaw and lip curves from `curves.json` |
+
+Results on the final build are tabulated in [12](12-voices-and-sound.md). The motion check repeated on that build: mouth
+region median 2.83, maximum 5.60, against 2.79 for grain alone.
+
+Still not checked: nobody listened, and only Chromium was run.
