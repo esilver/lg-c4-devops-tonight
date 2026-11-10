@@ -243,7 +243,7 @@ The old pose renders and both old bundles stay in the repository because earlier
 | `onepager/page.html`, `onepager/img/` | final (source) | The one-page explainer and its twenty pictures |
 | `onepager/index.html` | final | The same page with its pictures inlined (2.0 MB), as published |
 | `onepager/devops-tonight-how-it-was-made.jpg`, `…-8000.jpg`, `…-part1.jpg` to `part3.jpg` | final | The page as one picture at full size, as one picture 8000 px tall, and as three |
-| `onepager/src/` | intermediate | Four captures: the television, the demo page's chart, a pose sheet, a labelled mouth strip |
+| `onepager/src/` | intermediate | Four frames of the video, and three captures: the demo page's chart, a pose sheet, a labelled mouth strip |
 | `onepager/capture.js`, `make_images.py`, `build.py`, `export.js`, `stitch.py` | scripts | Gather the pictures, build the page, photograph it |
 
 `onepager/slices/` (the photographs the pictures are stitched from) is not kept.

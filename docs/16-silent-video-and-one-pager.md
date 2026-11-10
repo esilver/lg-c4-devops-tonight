@@ -31,15 +31,22 @@ locally, on four CPU cores.
 | The page as three pictures | `onepager/devops-tonight-how-it-was-made-part1.jpg` to `part3.jpg`, cut at section boundaries, for a gallery |
 
 It has eight steps, each with the models used and a picture: a generated photograph, the cut-out, the 65 re-posed
-stills, the voice and its timing, the lip reference, the motion fields, the body and hair maps, and the browser.
-It ends with a table of the twelve models and whether each one's output is in the page, and four plain notes: nothing
-in it is real, it was built by an AI coding agent, where the technique stops, and that licences differ.
+stills, the voice and its timing, the lip reference, the motion fields, the body and hair maps, and compositing and
+recording the frames. It ends with a table of the twelve models and whether each one's output is in the video, and
+four plain notes: nothing in it is real, it was built by an AI coding agent, where the technique stops, and that
+licences differ.
+
+**Revised the same day.** The requester then wrote that the page should only describe how the video is made, as a
+link to post beside the video: "i dont care for the webgl". The first version led with the television and linked to
+it. Now the lead picture is four frames of the video, the last step is about compositing and recording the frames
+(3,215 of them, drawn one at a time in a headless browser and encoded with ffmpeg), and the television, the link to
+it and the page's own statistics are gone. Republished at 21:00 as version `1794344402-903e` of the same private page.
 
 **Where its pictures come from** (`onepager/make_images.py`, `onepager/capture.js`):
 
 | Picture | Source |
 |---|---|
-| The television | The television page in a headless browser, camera moved in, the bulletin held at 6.6 s |
+| Four moments of the video | Frames of `demo/devops-tonight.mp4` at 8, 36, 62 and 84 seconds |
 | The five presenters | `gen/work/<name>/frame_lp3.png` |
 | Photograph, matte, cut-out, plate | `gen/work/dee/frame.png`, `alpha.png`, `plate3.jpg` |
 | Every kind of pose | `tests/poses.js paige`: the page itself forced into each pose |
@@ -67,7 +74,7 @@ running the full width, and it stacks on a phone.
 
 - The page was looked at once as rendered, at 1200 px wide; it does not overflow sideways and its three web fonts
   load. It was not opened on a phone.
-- Every figure in it is taken from this repository's own numbers: 65 poses a face, 321 images in the bundle, sixteen
-  recordings, a 4.4 MB page, about 1,400 lines of page code.
+- Every figure in it is taken from this repository's own numbers: 65 poses a face, twelve models, 321 images in the
+  bundle, sixteen recordings, 3,215 frames in the video.
 - Licences in it are described from memory, as in [11](11-models-and-licences.md), and it says to check the model cards.
-- It links to the television page's public copy. It contains no name, address or other detail of the requester.
+- It contains no link, and no name, address or other detail of the requester.

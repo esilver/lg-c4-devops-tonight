@@ -1,8 +1,9 @@
 """make_images.py : gathers, crops and resizes the pictures the one-pager shows -> onepager/img/
 
-Everything comes from files already in the repository (the presenters' frames, mattes and plates, the pose renders as
-the page draws them, the lip-sync network's own picture, the body maps, the measurement chart), plus four captures:
-  node onepager/capture.js                                              -> src/hero.png, src/chart.png
+Everything comes from files already in the repository (four frames of the video, the presenters' frames, mattes and
+plates, the pose renders as they are drawn, the lip-sync network's own picture, the body maps, the measurement chart),
+plus three captures:
+  node onepager/capture.js                                              -> src/chart.png
   cd tests/output && node ../poses.js paige ../../onepager/src/poses_paige.jpg
   cd tests/output && node ../phoneme_strip.js paige 0 0.3 30 20 ../../onepager/src/phon_paige.jpg
 One picture is drawn here: the measured displacement field of a head turn and of a nod, as arrows.
@@ -12,8 +13,12 @@ O = "onepager/img/"; KEYS = ["paige", "cy", "dee", "sunny", "mel"]
 def save(name, im, q=84): cv2.imwrite(O + name, im, [cv2.IMWRITE_JPEG_QUALITY, q]); return im.shape[1], im.shape[0]
 def fit(im, w): return cv2.resize(im, (w, round(im.shape[0] * w / im.shape[1])), interpolation=cv2.INTER_AREA if w < im.shape[1] else cv2.INTER_CUBIC)
 out = {}
-# the television, cropped to the set and its stand
-h = cv2.imread("onepager/src/hero.png"); out["hero.jpg"] = save("hero.jpg", fit(h[180:1250, 400:2060], 1500), 86)
+# four moments of the video itself: the anchor, the reporter, the forecast, the interview
+import subprocess
+fr4 = []
+for t in (8, 36, 62, 84):
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", str(t), "-i", "demo/devops-tonight.mp4", "-frames:v", "1", f"onepager/src/frame_{t}.png"], check=True); fr4.append(cv2.imread(f"onepager/src/frame_{t}.png"))
+out["hero.jpg"] = save("hero.jpg", fit(np.vstack([np.hstack(fr4[:2]), np.hstack(fr4[2:])]), 1500), 86)
 # the five presenters, as photographed (with the relaxed mouth laid in)
 for k in KEYS: out[f"cast_{k}.jpg"] = save(f"cast_{k}.jpg", fit(cv2.imread(f"gen/work/{k}/frame_lp3.png"), 520))
 # cutting a person out: photograph, matte, cut-out on a checkerboard, plate

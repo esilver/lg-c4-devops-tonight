@@ -218,3 +218,6 @@ Described in [16](16-silent-video-and-one-pager.md). The silent copy showed that
 running fast in every rendered video; the renderer was fixed and both videos were made again. The one-pager was
 built from pictures already in the repository plus four captures, published as a new private page, and exported
 as pictures because a link is not always what a forum wants.
+
+At 21:00 the one-pager was republished without the television: the requester wanted it to describe only how the video
+is made, to link beside the video.

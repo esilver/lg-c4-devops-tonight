@@ -83,24 +83,24 @@
 <body>
 <div class="band"><div>
   <span class="bug"><svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="4" fill="#2ee6a6"/><path d="M13 13c-2.2-3.4-6.6-3.4-6.6 0s4.4 3.4 6.6 0c2.2-3.4 6.6-3.4 6.6 0s-4.4 3.4-6.6 0z" fill="none" stroke="#06281d" stroke-width="2.2" stroke-linecap="round"/></svg>DevOps Tonight</span>
-  <span>How it was made</span>
+  <span>How the video was made</span>
   <span class="tally">Every model ran locally, on a CPU</span>
 </div></div>
 <main>
   <header>
     <h1>Five newsreaders who do not exist, <em>animated without a video model</em></h1>
-    <p class="deck">DevOps Tonight is a two-minute satirical bulletin that plays on a television drawn in WebGL. Each presenter is one generated photograph. Local models re-pose that photograph, time the voice and work out what the mouth should do. The browser then blends the poses live in plain JavaScript.</p>
+    <p class="deck">DevOps Tonight is a two-minute satirical news bulletin. Each presenter is one generated photograph. Local models re-pose that photograph, time the voice and work out what the mouth should do. A short program then blends the poses frame by frame, and the frames are recorded as the video.</p>
     <ul class="facts">
-      <li><b>0</b><span>video models, and no video file in the page</span></li>
+      <li><b>0</b><span>video models</span></li>
       <li><b>1</b><span>photograph for each presenter</span></li>
       <li><b>65</b><span>poses rendered from it</span></li>
-      <li><b>321</b><span>small images in the page, blended live</span></li>
+      <li><b>12</b><span>local models, listed at the end</span></li>
       <li><b>4</b><span>CPU cores did all of it; no GPU</span></li>
-      <li><b>4.4 MB</b><span>one HTML file, no libraries</span></li>
+      <li><b>3,215</b><span>frames, drawn one at a time</span></li>
     </ul>
     <figure>
-      <img src="img/hero.jpg" width="1500" height="967" alt="A television on a wooden sideboard. On its screen a woman in a red jacket reads the news, with the name strap Paige Duty, a caption and a ticker.">
-      <figcaption>The page. The set is drawn in raw WebGL and can be orbited. The bulletin on its screen is composited frame by frame while you watch.</figcaption>
+      <img src="img/hero.jpg" width="1500" height="844" alt="Four frames of a news bulletin: a woman in a red jacket at a studio desk, a bearded reporter outside an office building, a woman in front of a satellite weather map, and a split screen with an anchor and an older guest on a video call.">
+      <figcaption>Four moments from the video: the anchor, the reporter outdoors, the cloud forecast and the interview.</figcaption>
     </figure>
   </header>
 
@@ -120,7 +120,7 @@
   <section>
     <div class="strap"><span class="no">02</span><h2>Cut the person out</h2></div>
     <div class="with">With <i>BiRefNet-portrait</i> <i>YuNet face detector</i></div>
-    <div class="words"><p>A matting network separates the presenter from the background, hair included. A small face detector finds the eyes and the mouth, which every later step uses as its ruler. The page keeps two layers: a cut-out it can move, and a plate with the person painted out, so that there is something behind the figure when it sways aside.</p></div>
+    <div class="words"><p>A matting network separates the presenter from the background, hair included. A small face detector finds the eyes and the mouth, which every later step uses as its ruler. Two layers are kept: a cut-out that can move, and a plate with the person painted out, so that there is something behind the figure when it sways aside.</p></div>
     <div class="tiles four">
         <figure><img src="img/matte_photo.jpg" width="520" height="292" alt="The reporter's photograph."><figcaption>photograph</figcaption></figure>
         <figure><img src="img/matte_alpha.jpg" width="520" height="292" alt="A white silhouette of the reporter on black."><figcaption>matte</figcaption></figure>
@@ -135,14 +135,14 @@
     <div class="words"><p>LivePortrait moves a face by shifting a few keypoints. Here it never makes video. It renders stills of the same face: a grid of mouths (jaw openings from shut to wide, each with the lips relaxed, spread, rounded or smiling), lips pressed together for m, b and p, lids half and fully closed, eyes left, right and down, the head turned and nodded, brows raised and lowered. Each pose takes about 6.5 seconds.</p><p>The photographs all smile with closed lips, and at first every presenter talked through that smile. The poses were rendered again around a relaxed mouth. The smile is kept for when someone is listening.</p></div>
     <figure>
       <img src="img/poses.jpg" width="1650" height="940" alt="Thirty-two small pictures of the same woman's face: head turned each way, brows up and down, eyes closed, eyes left and right, smiles, and many mouth shapes.">
-      <figcaption>Every kind of pose, as the page draws it. The page only ever blends neighbours in this set, so nothing is invented at run time.</figcaption>
+      <figcaption>Every kind of pose. The animation only ever blends neighbours in this set, so nothing is invented when a frame is drawn.</figcaption>
     </figure>
   </section>
 
   <section>
     <div class="strap"><span class="no">04</span><h2>Record a voice and time every sound</h2></div>
     <div class="with">With <i>Phonon 31M</i> <i>Kokoro-82M</i> <i>Chatterbox</i> <i>wav2vec 2.0 phoneme recogniser</i> <i>Whisper base</i></div>
-    <div class="words"><p>A speech model reads each line three times. Whisper transcribes every take, so a take with a wrong word is never used. A phoneme recogniser is then aligned to the chosen take, which gives the start and length of every sound, and the pitch of the voice is traced. Three speech models were tried in turn; the page uses Phonon and the demo page can switch between all three.</p></div>
+    <div class="words"><p>A speech model reads each line three times. Whisper transcribes every take, so a take with a wrong word is never used. A phoneme recogniser is then aligned to the chosen take, which gives the start and length of every sound, and the pitch of the voice is traced. Three speech models were tried in turn; the video uses Phonon.</p></div>
     <figure>
       <img src="img/chart.png" width="1650" height="895" alt="A chart with six lanes over one spoken line: jaw opening, lip shape, voice pitch, brows, head nod and breath, with the words and their phonemes along the bottom.">
       <figcaption>One line of the bulletin. Words and phonemes run along the bottom. Jaw and lips follow the sounds; brows and nods follow the pitch and stress of the voice; the breath follows the phrases.</figcaption>
@@ -161,7 +161,7 @@
     </div>
     <figure>
       <img src="img/phon.jpg" width="1500" height="354" alt="Thirty close-ups of a mouth in sequence, each labelled with the sound being spoken and how far the jaw is open.">
-      <figcaption>What the page draws from those measurements, one frame every twentieth of a second, each labelled with the sound being made, the word, and the jaw opening.</figcaption>
+      <figcaption>What is drawn from those measurements, one frame every twentieth of a second, each labelled with the sound being made, the word, and the jaw opening.</figcaption>
     </figure>
   </section>
 
@@ -169,7 +169,7 @@
     <div class="strap"><span class="no">06</span><h2>Turn two pictures into motion</h2></div>
     <div class="with">With <i>optical flow (OpenCV)</i></div>
     <div class="split">
-      <div class="words"><p>Cross-fading between a head facing ahead and a head turned shows two faint heads at once. Optical flow between the two renders says where each point of the face goes instead.</p><p>Six such fields are stored on a coarse grid: turn right and left, nod down and up, brows up and down. The browser moves a mesh by a weighted sum of them, so the nose travels further than the ears, as it does on a real head.</p></div>
+      <div class="words"><p>Cross-fading between a head facing ahead and a head turned shows two faint heads at once. Optical flow between the two renders says where each point of the face goes instead.</p><p>Six such fields are stored on a coarse grid: turn right and left, nod down and up, brows up and down. A mesh is moved by a weighted sum of them, so the nose travels further than the ears, as it does on a real head.</p></div>
       <div class="tiles two">
         <figure><img src="img/flow_turn.jpg" width="640" height="614" alt="Arrows over a face, all pointing right, longest at the nose."><figcaption>a turn of six degrees</figcaption></figure>
         <figure><img src="img/flow_nod.jpg" width="640" height="614" alt="Arrows over a face, pointing down, longest at the nose and chin."><figcaption>a nod of five degrees</figcaption></figure>
@@ -194,9 +194,9 @@
   </section>
 
   <section>
-    <div class="strap"><span class="no">08</span><h2>The browser does the rest</h2></div>
-    <div class="with">With <i>no model at all</i> <i>Canvas 2D</i> <i>raw WebGL</i> <i>Web Audio</i></div>
-    <div class="words"><p>The page holds 321 small images and sixteen MP3s. For every frame it blends the nearest mouth and eye poses onto the cut-out, moves the result with a small mesh, and draws it over the plate with a slow camera move, grain, captions and graphics. Each voice plays through a simulated room. There is no video file, no library and no network request, in about 1,400 lines of JavaScript, HTML and CSS.</p><p>The agent that built it cannot watch video, so movement was checked by measuring rendered frames. The chart shows that measurement for one presenter.</p></div>
+    <div class="strap"><span class="no">08</span><h2>Composite every frame, then record it</h2></div>
+    <div class="with">With <i>no model at all</i> <i>plain JavaScript</i> <i>headless Chromium</i> <i>ffmpeg</i></div>
+    <div class="words"><p>The animation is a program in plain JavaScript, with no libraries. It holds 321 small images and sixteen recordings. For every frame it blends the nearest mouth and eye poses onto the cut-out, moves the result with a small mesh, and draws it over the plate with a slow camera move, grain, captions and graphics. Brows and nods follow the pitch and stress of the voice.</p><p>For the video, a headless browser draws the 3,215 frames one at a time and ffmpeg encodes them with the sound. The agent that built it cannot watch video, so movement was checked by measuring those frames. The chart shows that measurement for one presenter.</p></div>
     <figure>
       <img src="img/motion.png" width="1650" height="1350" alt="Six small charts over fifteen seconds: mouth opening, breath, shoulders up, chest sideways, and loose hair sideways and down.">
       <figcaption>What moves while a line is spoken. Mouth and breath are what the engine asks for. Shoulders, chest and hair are measured on the rendered frames with optical flow, in pixels of a 1024-pixel-wide picture.</figcaption>
@@ -206,14 +206,14 @@
   <section>
     <div class="strap"><span class="no">all</span><h2>What ran locally</h2></div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Model</th><th>Its job here</th><th>Is its output in the page?</th></tr></thead>
+      <thead><tr><th>Model</th><th>Its job here</th><th>Is its output in the video?</th></tr></thead>
       <tbody>
         <tr><td>Realistic Vision 5.1</td><td>The photographs of the five presenters and the six locations</td><td>Yes, as the stills</td></tr>
         <tr><td>YuNet</td><td>Finds eyes and mouth</td><td>No</td></tr>
         <tr><td>BiRefNet-portrait</td><td>Cuts each presenter out of the photograph</td><td>Yes, as the cut-out's edge</td></tr>
         <tr><td>LivePortrait</td><td>Renders 65 poses of each face</td><td>Yes, as the mouth and eye poses</td></tr>
-        <tr><td>Phonon 31M</td><td>The voices in use</td><td>Yes, as sixteen MP3s</td></tr>
-        <tr><td>Kokoro-82M, Chatterbox</td><td>Two earlier sets of voices, kept for comparison</td><td>On the demo page</td></tr>
+        <tr><td>Phonon 31M</td><td>The voices in the video</td><td>Yes, as the sixteen spoken lines</td></tr>
+        <tr><td>Kokoro-82M, Chatterbox</td><td>Two earlier sets of voices, replaced</td><td>No</td></tr>
         <tr><td>wav2vec 2.0 phonemes</td><td>Times every sound in a recording</td><td>As timing</td></tr>
         <tr><td>Whisper base</td><td>Checks that each take says the right words</td><td>No</td></tr>
         <tr><td>Wav2Lip</td><td>Says what the mouth should do for each recording</td><td>As two curves a line; never as pixels</td></tr>
@@ -223,13 +223,13 @@
     </table></div>
     <ul class="notes">
       <li><b>Nothing here is real.</b> The presenters, the places and the voices are synthetic, the news is satire, and nobody's likeness or voice was copied.</li>
-      <li><b>How it was built.</b> In one long session by an AI coding agent (Claude Code) working from eleven short requests. All models ran on four CPU cores with no GPU; making everything again takes about six hours and 11 GB of downloads.</li>
+      <li><b>How it was built.</b> In one long session by an AI coding agent (Claude Code) working from a dozen short requests. All models ran on four CPU cores with no GPU; making everything again takes about six hours and 11 GB of downloads.</li>
       <li><b>Where it stops.</b> It is a warp of one photograph a person. Heads turn about six degrees at most, hands never appear, and hair moves as a sheet.</li>
       <li><b>Licences differ.</b> Wav2Lip and the face parser's training data are for research and personal use. Check each model card before reusing anything.</li>
     </ul>
   </section>
 
-  <footer><span>DevOps Tonight</span><span>The live page: <a href="https://claude.ai/artifact/MVwkTuSzuiyrPJeqyG4HhD">claude.ai/artifact/MVwkTuSzuiyrPJeqyG4HhD</a></span><span>10 November 2026</span></footer>
+  <footer><span>DevOps Tonight</span><span>How the video was made</span><span>10 November 2026</span></footer>
 </main>
 </body>
 </html>
