@@ -104,8 +104,7 @@ eye regions are a little softer than the photograph.
 
 ## Measured
 
-On the four shared processor cores of the build machine, in headless Chromium. Speed depends on what else the
-machine was doing; the other numbers do not.
+On the four shared processor cores of the build machine, in headless Chromium.
 
 | | |
 |---|---|
@@ -113,7 +112,7 @@ machine was doing; the other numbers do not.
 | Times (aligner against worker, 336 sounds) | +2 ms median; half within 20 ms, 90% within 60 ms |
 | Lips on the page (7 lines, two turns) | the aligner hears 29 p, b and m; the engine's mouth is shut for all 29, its middle −3 ms from the sound's (median), all within 40 ms |
 | Lips in a finished video (`avatar/record.js`, 20 s, 24 p, b and m) | a frame with the mouth shut within 150 ms of 21, by a crude count of dark and tooth-coloured pixels; nearest such frame 11 ms away (median). One of the three it missed was looked at: the lips are together there |
-| Speed | a line takes 1.2 to 1.8 times as long to make as to say, on one core, while the machine was also rendering poses |
+| Speed | on one core here a line takes 1.3 times as long to make as to say with the machine otherwise idle (34.9 s of speech in 46.3 s), and up to 1.8 times while it was also rendering poses. So on this machine the voice is slower than speech; a faster core, or several workers on idle cores, is what makes it keep up |
 | First sound after Send | 5 to 8 s here, of which up to 4 s is the hold-back |
 | Starting the voice | 8 to 12 s from the folder; 11 s from the viewer's files |
 | As published (`avatar/test_published.js`) | first visit asks for model and voice; after adding them the voice starts and a reply is spoken with it; a voice added later appears; after a reload nothing needs adding; with no `.wasm` from the CDN the page asks for it too |
