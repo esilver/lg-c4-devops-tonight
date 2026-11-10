@@ -19,6 +19,9 @@ Weights only (ONNX files from facefusion/models-3.0.0 on the Hugging Face Hub); 
 import sys, json, os, glob, math, numpy as np, cv2, onnxruntime as ort, librosa, soundfile as sf
 from scipy.signal import lfilter
 W, H, FPS = 1024, 576, int(os.environ.get('LIP_FPS', '50'))      # measurements a second; LIP_FPS=25 halves the work for a set that matters less
+# Which pose set the page uses: "lp4" is the one built around a relaxed mouth (request 11, lpx4.py / lpexport3.py);
+# LIP_POSES=lp gives the earlier one (lpx2.py / lpexport2.py), with its own base frame and mask.
+LP = os.environ.get('LIP_POSES', 'lp4'); BASE, MASK = ("frame_lp3.png", "masks.png") if LP == "lp4" else ("frame_lp2.png", "masks2.png")
 so = ort.SessionOptions(); so.intra_op_num_threads = 4
 _s = {}
 def sess(n):
@@ -43,12 +46,12 @@ def measure(lm, iod):
 class Face:
     def __init__(self, key):
         d = f"work/{key}"; self.key = key; self.meta = json.load(open(f"{d}/meta.json")); self.iod = self.meta["iod"]; self.box = facebox(self.meta)
-        self.base = cv2.imread(f"{d}/frame_lp2.png"); self.A = np.array(json.load(open(f"{d}/lp/affine.json"))["A"])
-        self.mask = cv2.imread(f"{d}/lp/masks2.png")[..., 2:3].astype(np.float32) / 255            # the mouth region (red channel)
+        self.base = cv2.imread(f"{d}/{BASE}"); self.A = np.array(json.load(open(f"{d}/{LP}/affine.json"))["A"])
+        self.mask = cv2.imread(f"{d}/{LP}/{MASK}")[..., 2:3].astype(np.float32) / 255            # the mouth region (red channel)
         x1, y1, x2, y2 = self.box; self.small = cv2.resize(self.base[y1:y2, x1:x2], (96, 96), interpolation=cv2.INTER_AREA)
     def pose(self, name):
         """The frame as the page would show it with one pose render in the mouth region."""
-        im = cv2.imread(f"work/{self.key}/lp/{name}.png"); M = self.A.copy(); sc = math.sqrt(abs(np.linalg.det(M[:, :2])))
+        im = cv2.imread(f"work/{self.key}/{LP}/{name}.png"); M = self.A.copy(); sc = math.sqrt(abs(np.linalg.det(M[:, :2])))
         if sc < 0.92: im = cv2.resize(im, None, fx=sc, fy=sc, interpolation=cv2.INTER_AREA); M[:, :2] /= sc
         f = cv2.warpAffine(im, M, (W, H), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE).astype(np.float32)
         return (self.base * (1 - self.mask) + f * self.mask).round().astype(np.uint8)
@@ -76,15 +79,16 @@ class Face:
 KEYS = ["paige", "cy", "dee", "sunny", "mel"]
 SPEECH = dict(bundle="../src/speech.json", bundle_first="../src/speech_first.json", bundle_second="../src/speech_second.json")
 JAW = 46.0                                           # jaw units at an opening of 1 on the page (src/news.js)
+LEVEL = 0.155                                        # the opening every presenter reaches at the loud end of their speech, in eye distances
 def enc(v, lo, hi): return "".join(chr(40 + int(round(float(np.clip((x - lo) / (hi - lo), 0, 1)) * 85))) for x in v)
 def smooth3(x):
     x = np.asarray(x, float); p = np.pad(x, 1, mode="edge"); m = np.median(np.stack([p[:-2], p[1:-1], p[2:]]), axis=0); p = np.pad(m, 1, mode="edge"); return (p[:-2] + 2 * p[1:-1] + p[2:]) / 4
 if __name__ == "__main__":
     mode = sys.argv[1]
     if mode == "calib":
-        out = {}
-        for key in KEYS:
-            F = Face(key); dense = json.load(open(f"work/{key}/lp/dense.json")); JN, JS = dense["jn"], dense["js"]
+        out = json.load(open("work/lipcal.json")) if os.path.exists("work/lipcal.json") and len(sys.argv) > 2 else {}
+        for key in (sys.argv[2:] or KEYS):
+            F = Face(key); dense = json.load(open(f"work/{key}/{LP}/dense.json")); JN, JS = dense["jn"], dense["js"]
             m = lambda name: measure(landmarks(F.soften(F.pose(name)), F.box), F.iod)
             cal = dict(jn=JN, js=JS, n=[measure(landmarks(F.soften(F.base), F.box), F.iod)] + [m(f"d_n{i:02d}") for i in range(1, len(JN))])
             for r in ("e1", "e2", "w1", "w2", "sg"): cal[r] = [m(f"d_{r}_{i}") for i in range(len(JS))]
@@ -124,8 +128,10 @@ if __name__ == "__main__":
         #    the same as the photograph's, in pauses it sometimes leaves the lips apart, and it opens some faces more timidly
         #    than others, which says something about the network and not about how those presenters speak. So each
         #    presenter's readings are put on a common footing: the 12th percentile while speaking is "shut" (that is where
-        #    their m, b and p readings lie), and the 90th percentile is the same opening for all five, set 15% above the
-        #    middle presenter's because the reference under-opens as a whole (its pictures are averages, and averages are timid).
+        #    their m, b and p readings lie), and the 90th percentile is brought UP to a common opening where the reference
+        #    was timid. That opening is LEVEL: 0.155 eye distances, about a centimetre between the lips at the loud end of
+        #    clear speech. Nobody is scaled down any more (request 11: "his lips are too tight"; before, the level was
+        #    0.13 and the presenter the reference opened furthest was reduced by a fifth to meet it).
         speak = {k: [] for k in KEYS}; quietw = {k: [] for k in KEYS}
         for ln, sp in zip(raw["lines"], S):
             v = np.array(ln["v"]); o = smooth3(v[:, 0]); lag = lags[ln["who"]]
@@ -136,7 +142,7 @@ if __name__ == "__main__":
                     if dur > 0.25: quietw[ln["who"]] += v[int((t + 0.08 + lag) * fps):int((t + dur - 0.08 + lag) * fps), 2].tolist()
                 else: speak[ln["who"]] += o[a:b].tolist()
         shut = {k: float(np.percentile(speak[k], 12)) for k in KEYS}; top = {k: float(np.percentile(speak[k], 90)) - shut[k] for k in KEYS}
-        target = 1.15 * float(np.median(list(top.values()))); amp = {k: float(np.clip(target / top[k], 0.7, 2.0)) for k in KEYS}
+        target = LEVEL; amp = {k: float(np.clip(target / top[k], 1.0, 2.2)) for k in KEYS}
         print("   shut reading:", {k: round(v, 3) for k, v in shut.items()}, "| loud-end opening above it:", {k: round(v, 3) for k, v in top.items()}, f"| common level {target:.3f} eye distances, so scaled by", {k: round(v, 2) for k, v in amp.items()})
         stats = []
         for ln, sp in zip(raw["lines"], S):
@@ -153,7 +159,7 @@ if __name__ == "__main__":
         json.dump(S, open(SPEECH[SET], "w"), ensure_ascii=False)
         for n, who, med, mx, pr, s0, s1 in stats: print(f"{n:2d} {who:5s} typical opening {med:.2f}, widest {mx:.2f}, shut {100 * pr:2.0f}% of the time, shape {s0:+.2f} to {s1:+.2f}")
     elif mode == "proto":                                  # a first look: one presenter's poses and one line
-        F = Face(sys.argv[2]); dense = json.load(open(f"work/{F.key}/lp/dense.json"))
+        F = Face(sys.argv[2]); dense = json.load(open(f"work/{F.key}/{LP}/dense.json"))
         print("neutral photo:", [round(v, 3) for v in measure(landmarks(F.base, F.box), F.iod)], "softened:", [round(v, 3) for v in measure(landmarks(F.soften(F.base), F.box), F.iod)])
         for i, j in enumerate(dense["jn"]):
             if i == 0: continue

@@ -1,0 +1,6 @@
+00 paige 251 frames, opening 0.054 to 0.249
+02 paige 393 frames, opening 0.054 to 0.246
+08 paige 191 frames, opening 0.052 to 0.252
+09 sunny 268 frames, opening 0.029 to 0.256
+10 sunny 440 frames, opening 0.029 to 0.207
+14 paige 278 frames, opening 0.054 to 0.252

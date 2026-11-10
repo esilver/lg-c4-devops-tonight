@@ -1,0 +1,10 @@
+01 cy    243 frames, opening 0.041 to 0.348
+03 cy    341 frames, opening 0.047 to 0.289
+04 dee   236 frames, opening 0.001 to 0.121
+05 dee   313 frames, opening 0.001 to 0.171
+06 cy    146 frames, opening 0.041 to 0.270
+07 dee   214 frames, opening 0.000 to 0.136
+11 cy    325 frames, opening 0.037 to 0.298
+12 mel   375 frames, opening 0.000 to 0.182
+13 cy    98 frames, opening 0.044 to 0.258
+15 cy    208 frames, opening 0.046 to 0.283

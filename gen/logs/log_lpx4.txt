@@ -1,0 +1,5 @@
+mel 65 poses 406 s
+cy 65 poses 485 s
+dee 65 poses 595 s
+sunny 65 poses 658 s
+paige 65 poses 840 s
