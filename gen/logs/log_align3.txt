@@ -1,0 +1,70 @@
+(progress bars removed)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of the `task` and `language` flags/config options.
+A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags.
+A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags.
+ 0 paige t1 errors 1 match  -0.33 worst  -1.93 rate  9.9/s lead 0.15 tail 0.56 | Good evening, this is DevOps Tonight. I'm Paige Judy, and yes, I am on call.
+ 0 paige t2 errors 1 match  -0.11 worst  -0.69 rate 10.3/s lead 0.19 tail 0.60 | Good evening, this is DevOps Tonight. I'm Paige Judy, and yes, I am on call.
+ 0 paige t3 errors 0 match  -0.10 worst  -0.76 rate  9.7/s lead 0.11 tail 0.55 | Good evening, this is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
+   -> take 3
+ 1 cy    t1 errors 3 match  -0.28 worst  -2.09 rate 12.8/s lead 0.09 tail 0.66 | and I'm side-to-car. It is 2026 and production is, for the moment, up.
+ 1 cy    t2 errors 3 match  -0.26 worst  -2.20 rate 12.6/s lead 0.10 tail 0.66 | and I'm side a car. It is 2026 and production is for the moment up.
+ 1 cy    t3 errors 3 match  -0.36 worst  -2.53 rate 13.1/s lead 0.10 tail 0.67 | and I'm side to car. It is 2026 and production is for the moment up.
+   -> take 1
+ 2 paige t1 errors 0 match  -0.48 worst  -4.63 rate 12.1/s lead 0.12 tail 0.58 | Our top story, an AI agent opened 40 pull requests overnight. A second agent approved them. A human is now being paged.
+ 2 paige t2 errors 0 match  -0.47 worst  -4.38 rate 11.8/s lead 0.11 tail 0.59 | Our top story, an AI agent opened 40 pull requests overnight. A second agent approved them. A human is now being paged.
+ 2 paige t3 errors 0 match  -0.42 worst  -3.94 rate 11.6/s lead 0.12 tail 0.59 | Our top story, an AI agent opened 40 pull requests overnight. A second agent approved them. A human is now being paged.
+   -> take 3
+ 3 cy    t1 errors 1 match  -0.39 worst  -1.13 rate  9.3/s lead 0.09 tail 0.51 | Meanwhile, a routine Friday deploy is underway in UNADS East 1. Deploy is at the scene. D?
+ 3 cy    t2 errors 0 match  -0.34 worst  -1.43 rate  9.4/s lead 0.09 tail 0.56 | Meanwhile, a routine Friday deploy is underway in U.S. East One. Deploy is at the scene. D?
+ 3 cy    t3 errors 0 match  -0.30 worst  -1.08 rate  9.1/s lead 0.08 tail 0.48 | Meanwhile, a routine Friday deploy is underway in U.S. East One. Deploy is at the scene. D?
+   -> take 3
+ 4 dee   t1 errors 0 match  -0.49 worst  -2.83 rate 15.0/s lead 0.17 tail 0.69 | Thanks, Sai. The pipeline behind me has been green for nine minutes, and nobody here trusts it.
+ 4 dee   t2 errors 0 match  -0.47 worst  -2.76 rate 14.6/s lead 0.17 tail 0.65 | Thanks, Sai. The pipeline behind me has been green for nine minutes, and nobody here trusts it.
+ 4 dee   t3 errors 0 match  -0.47 worst  -2.82 rate 14.9/s lead 0.17 tail 0.66 | Thanks, Sai. The pipeline behind me has been green for nine minutes and nobody here trusts it.
+   -> take 2
+ 5 dee   t1 errors 0 match  -0.29 worst  -0.81 rate 11.7/s lead 0.09 tail 0.58 | Engineers have checked the dashboards, the rollback plan, and DNS. Sources say it is always DNS.
+ 5 dee   t2 errors 0 match  -0.32 worst  -0.80 rate 11.5/s lead 0.09 tail 0.55 | Engineers have checked the dashboards, the rollback plan, and DNS. Sources say it is always DNS.
+ 5 dee   t3 errors 0 match  -0.33 worst  -0.83 rate 11.6/s lead 0.09 tail 0.58 | Engineers have checked the dashboards, the rollback plan, and DNS. Sources say it is always DNS.
+   -> take 2
+ 6 cy    t1 errors 1 match  -0.13 worst  -0.55 rate 12.8/s lead 0.09 tail 0.53 | Did anyone suggest waiting until Monday?
+ 6 cy    t2 errors 1 match  -0.08 worst  -0.21 rate 12.4/s lead 0.10 tail 0.51 | Did anyone suggest waiting until Monday?
+ 6 cy    t3 errors 1 match  -0.07 worst  -0.23 rate 11.9/s lead 0.08 tail 0.58 | Did anyone suggest waiting until Monday?
+   -> take 2
+ 7 dee   t1 errors 1 match  -0.49 worst  -1.27 rate 11.0/s lead 0.10 tail 0.59 | One person did say they have been moved to the platform team. Back to you.
+ 7 dee   t2 errors 0 match  -0.43 worst  -1.16 rate 11.9/s lead 0.10 tail 0.59 | One person did, Si. They have been moved to the platform team. Back to you.
+ 7 dee   t3 errors 0 match  -0.44 worst  -1.27 rate 11.7/s lead 0.11 tail 0.60 | One person did, Si. They have been moved to the platform team. Back to you.
+   -> take 2
+ 8 paige t1 errors 0 match  -0.40 worst  -2.09 rate  9.6/s lead 0.10 tail 0.59 | Brave work. Now the cloud forecast with sunny uptime.
+ 8 paige t2 errors 0 match  -0.38 worst  -1.98 rate  9.8/s lead 0.10 tail 0.57 | Brave work. Now the cloud forecast with sunny uptime.
+ 8 paige t3 errors 0 match  -0.41 worst  -2.08 rate  9.8/s lead 0.10 tail 0.56 | Brave work. Now the cloud forecast with sunny uptime.
+   -> take 2
+ 9 sunny t1 errors 0 match  -0.44 worst  -3.00 rate 12.0/s lead 0.16 tail 0.66 | Thanks Page. Pods are stuck pending across the north while the auto scaler thinks about it.
+ 9 sunny t2 errors 0 match  -0.39 worst  -2.67 rate 11.8/s lead 0.16 tail 0.66 | Thanks, Paige. Pods are stuck pending across the north while the auto-scaler thinks about it.
+ 9 sunny t3 errors 0 match  -0.43 worst  -2.88 rate 12.0/s lead 0.16 tail 0.66 | Thanks page. Pods are stuck pending across the north while the auto scaler thinks about it.
+   -> take 2
+10 sunny t1 errors 0 match  -0.39 worst  -1.99 rate 10.1/s lead 0.15 tail 0.57 | in the south, scattered 503s with a chance of retries. Four nines along the coast and a high of $9,000 in egress.
+10 sunny t2 errors 0 match  -0.35 worst  -1.86 rate  9.9/s lead 0.15 tail 0.50 | In the south, scattered 503s with a chance of retries. Four nines along the coast and a high of $9,000 in egress.
+10 sunny t3 errors 0 match  -0.34 worst  -1.82 rate 10.0/s lead 0.15 tail 0.51 | In the south, scattered 503s with a chance of retries. Four nines along the coast and a high of $9,000 in egress.
+   -> take 3
+11 cy    t1 errors 0 match  -0.36 worst  -1.85 rate 11.0/s lead 0.09 tail 0.56 | Joining us is YML Staff YAML Engineer, with agents writing the config now is your job safe.
+11 cy    t2 errors 0 match  -0.39 worst  -2.54 rate 11.0/s lead 0.08 tail 0.62 | Joining us is YML Staff YAML Engineer, with Agents writing the config now is your job safe.
+11 cy    t3 errors 0 match  -0.34 worst  -1.67 rate 10.6/s lead 0.09 tail 0.63 | Joining us is YML Staff YAML Engineer, with Agents writing the config now is your job safe.
+   -> take 3
+12 mel   t1 errors 0 match  -0.25 worst  -2.65 rate  8.7/s lead 0.14 tail 0.00 | Sai, the agent, writes 4,000 lines of yaml a day. Someone still has to find the one wrong indent.
+12 mel   t2 errors 0 match  -0.27 worst  -2.59 rate  9.4/s lead 0.14 tail 0.62 | Sigh, the agent writes 4,000 lines of YAML a day. Someone still has to find the one wrong indent.
+12 mel   t3 errors 0 match  -0.19 worst  -2.61 rate  9.4/s lead 0.14 tail 0.55 | Si, the agent writes 4,000 lines of YAML a day. Someone still has to find the one wrong indent.
+   -> take 2
+13 cy    t1 errors 0 match  -0.90 worst  -2.24 rate 11.2/s lead 0.10 tail 0.67 | Chilling. Thank you for your time.
+13 cy    t2 errors 1 match  -1.07 worst  -2.13 rate 11.9/s lead 0.11 tail 0.69 | Shilling. Thank you for your time.
+13 cy    t3 errors 1 match  -1.04 worst  -2.06 rate 12.0/s lead 0.11 tail 0.70 | Shilling. Thank you for your time.
+   -> take 1
+14 paige t1 errors 1 match  -0.31 worst  -2.50 rate 11.2/s lead 0.14 tail 0.58 | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it costs.
+14 paige t2 errors 0 match  -0.33 worst  -2.96 rate 11.5/s lead 0.13 tail 0.56 | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it cost.
+14 paige t3 errors 0 match  -0.29 worst  -2.74 rate 11.5/s lead 0.11 tail 0.58 | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it cost.
+   -> take 3
+15 cy    t1 errors 0 match  -0.36 worst  -2.86 rate 11.5/s lead 0.12 tail 0.00 | From all of us in the control plane, good night, and may your pager stay quiet.
+15 cy    t2 errors 0 match  -0.36 worst  -2.73 rate 11.3/s lead 0.13 tail 0.00 | From all of us in the control plane, good night, and may your pager stay quiet.
+15 cy    t3 errors 0 match  -0.35 worst  -2.53 rate 13.3/s lead 0.13 tail 0.68 | From all of us in the control plane, good night, and may your pager stay quiet.
+   -> take 3
+total 93.8 s

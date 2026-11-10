@@ -1,22 +1,24 @@
 """audio_bundle2.py [tts2|tts] : level, trim and encode the spoken lines, measure the pitch of each voice, and write
 ../src/speech.json for the page (request 9; replaces audio_bundle.py).
 
-  ./venv4/bin/python audio_bundle2.py          the second voices (work/tts2/lines.json, timed by align.py) -> ../src/speech.json
+  ./venv4/bin/python audio_bundle2.py          the third voices (work/tts3/lines.json, timed by align.py) -> ../src/speech.json
+  ./venv4/bin/python audio_bundle2.py tts2     the second voices (work/tts2/lines.json, timed by align.py) -> ../src/speech_second.json
   ./venv4/bin/python audio_bundle2.py tts      the first voices (work/tts/lines.json, timed by their own model) -> ../src/speech_first.json
-                                               ("python3 build.py first" builds the pages with those instead)
+                                               ("python3 build.py first" or "second" builds the pages with those instead)
 
 Per line the page gets: the MP3 as a data: URI, its length, the time of its first loud sample, caption words with start
 times, every phoneme with start, length and relative loudness, and the pitch contour: one character per 40 ms, in half
 semitones above or below that speaker's median pitch ('-' where the voice is not sounding). Brows and head follow it.
-The levelled 16-bit WAVs go to work/bundle/ (work/bundle_first/ for the first voices) for the tests."""
+The levelled 16-bit WAVs go to work/bundle/ (work/bundle_first/ and work/bundle_second/ for the earlier voices) for the tests."""
 import sys, json, re, subprocess, base64, os, numpy as np, soundfile as sf, librosa
-SRC = sys.argv[1] if len(sys.argv) > 1 else "tts2"
+SRC = sys.argv[1] if len(sys.argv) > 1 else "tts3"
 SR = 24000; TARGET_LUFS = -19.0; LEAD, TAIL = 0.08, 0.18
 # the first voices' model reports each sound about three of its 25 ms frames late (measured in align.py check; its own
 # word times already allow for it), so those phoneme times are moved back
 SHIFT = -0.07 if SRC == "tts" else 0.0
 VOICED = "AIOWYQaiuæɐɑɒɔəɛɜɪʊʌᵻᵊmnŋlɹwjvzðʒbdɡʤT"
-BUNDLE = "work/bundle" if SRC == "tts2" else "work/bundle_first"; DEST = "../src/speech.json" if SRC == "tts2" else "../src/speech_first.json"
+# the third voices are the page's own; the first and second are kept for the demo page's switch
+BUNDLE, DEST = {"tts3": ("work/bundle", "../src/speech.json"), "tts2": ("work/bundle_second", "../src/speech_second.json"), "tts": ("work/bundle_first", "../src/speech_first.json")}[SRC]
 L = json.load(open(f"work/{SRC}/lines.json")); out = []; os.makedirs(BUNDLE, exist_ok=True)
 def lufs(path):
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128", "-f", "null", "-"], capture_output=True, text=True).stderr

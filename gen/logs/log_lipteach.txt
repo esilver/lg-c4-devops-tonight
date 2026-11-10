@@ -1,0 +1,5 @@
+00 paige 256 frames, opening 0.050 to 0.233
+01 cy    243 frames, opening 0.038 to 0.329
+02 paige 393 frames, opening 0.054 to 0.243
+03 cy    341 frames, opening 0.046 to 0.286
+04 dee   236 frames, opening 0.000 to 0.112

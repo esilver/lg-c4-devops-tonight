@@ -143,7 +143,16 @@ function buildSpeech(b) {
     else { T.push(g.t0 + g.d * (g.vowel ? 0.45 : 0.5) - (Math.abs(g.s) > 0.5 && g.ws > 0.8 ? 0.03 : 0)); O.push(o); S.push(sh); }      // rounding arrives early
   });
   T.push(Math.max(lastEnd, T[T.length - 1] + 0.05) + 0.12); O.push(0); S.push(0);
-  b.J = track(T.slice(), O, n, 0.014); b.S = track(T, S, n, 0.02);
+  b.J = track(T.slice(), O, n, 0.014); b.S = track(T, S, n, 0.02); b.taught = false;
+  if (sp.lip) {
+    // A learned reference takes over from the rules above. A lip-sync network (trained on real talking faces) was shown this
+    // recording and this face; its mouth was measured 50 times a second and translated into this presenter's own poses, so
+    // the opening and the lip shape here are what that network drew, not what a table of sounds says. One character a sample.
+    const f = sp.lip.fps, dec = (str, span, lo) => Float32Array.from(str, ch => (ch.charCodeAt(0) - 40) / 85 * span + lo), to = dec(sp.lip.o, 1.42, -0.12), ts = dec(sp.lip.s, 2, -1);
+    const at = (v, t) => { const x = clamp((t - L) * f, 0, v.length - 1.001), i = Math.floor(x); return v[i] + (v[i + 1] - v[i]) * (x - i); };
+    for (let i = 0; i < n; i++) { const t = i * DT, on = t >= L && t <= L + sp.len, br = 0.07 * rise(t, first - 0.3, first - 0.07) * (1 - rise(t, first - 0.02, first + 0.06)); b.J[i] = on ? Math.max(at(to, t), br) : br; b.S[i] = on ? at(ts, t) : 0; }
+    smooth(b.J, 0.01); smooth(b.S, 0.025); b.taught = true;
+  }
   // lip closures: shut by the time the sound starts, held to the release, never shorter than two frames of video
   const C = b.C = new Float32Array(n);
   for (const g of segs) if (g.c) {
@@ -224,7 +233,7 @@ for (const k in ASSETS.cast) {
 const grain = mkCanvas(256, 256);
 { const g = grain.getContext('2d'), d = g.createImageData(256, 256); for (let i = 0; i < d.data.length; i += 4) { const v = 128 + (Math.random() - 0.5) * 150; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; } g.putImageData(d, 0, 0); }
 const soft = mkCanvas(64, 36), softx = soft.getContext('2d');          // tiny copy = cheap blur
-const lofi = mkCanvas(231, 170), lofix = lofi.getContext('2d'); let lofiTick = -1;
+const lofi = mkCanvas(308, 227), lofix = lofi.getContext('2d'); let lofiTick = -1;
 
 function rr(x, y, w, h, r) {
   c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
@@ -246,7 +255,7 @@ function lines(text, maxW) {
 
 /* ── the mouth at a moment of a line: jaw opening (negative = lips pressed), lip shape, and whether the voice is on ── */
 function speechAt(b, bt, id) {
-  const J = samp(b.J, bt) * (ACT[id].m.gain || 1), C = samp(b.C, bt);
+  const J = samp(b.J, bt) * (b.taught ? 1 : ACT[id].m.gain || 1), C = samp(b.C, bt);      // the reference is already fitted to each face
   return { o: clamp(C > 0.9 ? -0.12 * (C - 0.9) / 0.1 : J * (1 - C / 0.9), -0.12, 1.3), s: clamp(samp(b.S, bt), -1, 1), on: bt > b.t0 - 0.1 && bt < b.t1 + 0.1 };
 }
 // Smiles: a line may list [who, from, to, strength] as fractions of its length; the smile eases in and, unless it runs to the end, out.
@@ -270,10 +279,9 @@ function faceAt(id, b, bt, ts, still) {
   const a = ACT[id], sd = a.m.seed, sty = STYLE[id] || 1, talk = b.sp && b.who === id, mo = b.mo, sp = talk ? speechAt(b, bt, id) : null;
   const P = postureAt(POSE[id] || [{ t: 0, y: 0, p: 0, r: 0 }], ts), q = { o: sp ? sp.o : 0, s: sp ? sp.s : 0, g: b.sp ? smileAt(b, bt, id) : 0, on: !!(sp && sp.on) };
   let yaw = P[0] + 0.07 * wob(ts * 0.5, sd), pit = P[1] + 0.05 * wob(ts * 0.6, sd + 3), roll = P[2] + 0.0035 * wob(ts * 0.45, sd + 7), bu = 0, bd = 0, emph = 0, blink = 0;
-  // the eyes dart a little all the time; someone on a video call mostly watches their screen, below the camera
+  // the eyes dart a little all the time
   const slot = Math.floor(ts / 0.85), tg = k => [(hash(k, sd) - 0.5) * 0.5, hash(k + 0.3, sd) < 0.2 ? 0.3 * hash(k + 0.7, sd) : 0], g0 = tg(slot - 1), g1 = tg(slot);
   const ge = clamp((ts - (slot * 0.85 + hash(slot + 0.1, sd) * 0.5)) / 0.045, 0, 1); let gx = g0[0] + (g1[0] - g0[0]) * ge, gy = g0[1] + (g1[1] - g0[1]) * ge;
-  if (id === 'mel') { const k = Math.floor(ts / 2.3), cam = j => (hash(j, 41) < (talk ? 0.45 : 0.2) ? 0 : 0.6), e = rise(ts, k * 2.3, k * 2.3 + 0.07); gy += cam(k - 1) + (cam(k) - cam(k - 1)) * e; }
   if (talk) {
     const x0 = bt - mo.first;                                    // just before speaking: a breath, chin and brows lift slightly
     const prep = rise(x0, -0.42, -0.14) * (1 - rise(x0, -0.06, 0.16)); pit -= 0.1 * prep; bu += 0.1 * prep;
@@ -446,10 +454,11 @@ function paneCrop(a, w, h) {
 }
 function pane(x, y, w, h, id, b, t, bt, remote) {
   const a = ACT[id], on = b.who === id, k = paneCrop(a, w, h);
-  view(x, y, w, h, k[0], k[1], k[2], k[3], () => drawActor(id, b.start + bt, { b, bt, zb: 1, zf: 1.012 }));
-  if (remote) {                    // a video call: low resolution, low frame rate
-    const tick = Math.floor(t * 15); if (tick !== lofiTick) { lofiTick = tick; lofix.drawImage(scr, x, y, w, h, 0, 0, 231, 170); }
-    c.drawImage(lofi, 0, 0, 231, 170, x, y, w, h);
+  const lead = remote ? 0.02 : 0;      // a held picture is on average half its interval old: draw the caller that much ahead
+  view(x, y, w, h, k[0], k[1], k[2], k[3], () => drawActor(id, b.start + bt + lead, { b, bt: bt + lead, zb: 1, zf: 1.012 }));
+  if (remote) {                    // a video call: softer, and 25 pictures a second
+    const tick = Math.floor(t * 25); if (tick !== lofiTick) { lofiTick = tick; lofix.drawImage(scr, x, y, w, h, 0, 0, 308, 227); }
+    c.drawImage(lofi, 0, 0, 308, 227, x, y, w, h);
   }
   const g = c.createLinearGradient(0, y + h - 70, 0, y + h); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.8)'); c.fillStyle = g; c.fillRect(x, y + h - 70, w, 70);
   c.fillStyle = ACC; c.fillRect(x + 14, y + h - 40, 4, 26);

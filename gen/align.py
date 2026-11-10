@@ -7,6 +7,7 @@ most likely way (forced alignment, a Viterbi search written here).
 
   ./venv4/bin/python align.py check        align the FIRST voices and compare with the timing their model reported
   ./venv4/bin/python align.py              choose the best take of each line in work/tts2/, align it, write work/tts2/lines.json
+  ./venv4/bin/python align.py tts3         the same for another set of takes (work/tts3/)
 
 Take choice: each take is aligned and transcribed by a speech recogniser. A take whose worst word matches its phonemes
 poorly, or whose transcript drops or adds words, loses to the other one."""
@@ -122,7 +123,7 @@ def hear(a16):
 SAME = [("twenty twenty six", "2026"), ("a i", "ai"), ("u s", "us"), ("d n s", "dns"), ("five oh threes", "503s"), ("nine thousand dollars", "9000"), ("why a mel", "ya mel"), ("y a mel", "ya mel"),
         ("sy", "cy"), ("sai", "cy"), ("sigh", "cy"), ("si", "cy"), ("psy", "cy"), ("dekkar", "dekar"), ("decar", "dekar"), ("de car", "dekar"), ("decker", "dekar"), ("side dekar", "cy dekar"), ("sidecar", "cy dekar"), ("side car", "cy dekar"),
         ("yammel", "yaml"), ("yamil", "yaml"), ("yamel", "yaml"), ("yamal", "yaml"), ("fin ops", "finops"), ("phenops", "finops"), ("auto scaler", "autoscaler"), ("one", "1"), ("four", "4"), ("forty", "40"), ("nine", "9"),
-        ("four thousand", "4000"), ("4 thousand", "4000"), ("under way", "underway"), ("dee ploy", "deploy"), ("d ploy", "deploy"), ("d", "dee"), ("doody", "duty"), ("yml", "ya mel"), ("yaml staff", "ya mel staff"), ("riding", "writing"), ("9s", "nines"), ("4 nines", "4 nines"), ("had", "have")]
+        ("four thousand", "4000"), ("4 thousand", "4000"), ("under way", "underway"), ("dee ploy", "deploy"), ("d ploy", "deploy"), ("d", "dee"), ("doody", "duty"), ("yml", "ya mel"), ("yaml staff", "ya mel staff"), ("riding", "writing"), ("re tries", "retries"), ("ee gress", "egress"), ("page", "paige"), ("yamal", "yaml"), ("9s", "nines"), ("4 nines", "4 nines"), ("had", "have")]
 def norm(s):
     s = re.sub(r"[^a-z0-9 ]", "", s.lower().replace("-", " ").replace("$", "")); s = " " + " ".join(s.split()) + " "
     for a, b in SAME: s = s.replace(f" {a} ", f" {b} ")
@@ -152,11 +153,12 @@ if __name__ == "__main__":
         for name, e in (("start", es), ("centre", ec)):
             m = np.median(e); print(f"{len(e)} phonemes, {name}: aligner minus model {m:+.0f} ms; scatter around that: median {np.median(np.abs(e - m)):.0f} ms, 90% within {np.percentile(np.abs(e - m), 90):.0f} ms")
         sys.exit()
-    SCRIPT = json.load(open("work/tts2/script.json")); out = []; report = []
-    PICK = json.load(open("work/tts2/pick.json")) if os.path.exists("work/tts2/pick.json") else {}       # takes chosen by hand after reading the report, e.g. {"3": 1}
+    SET = sys.argv[1] if len(sys.argv) > 1 else "tts2"
+    SCRIPT = json.load(open(f"work/{SET}/script.json")); out = []; report = []
+    PICK = json.load(open(f"work/{SET}/pick.json")) if os.path.exists(f"work/{SET}/pick.json") else {}       # takes chosen by hand after reading the report, e.g. {"3": 1}
     for ln, sc in zip(REF, SCRIPT):
         best = None
-        for f in sorted(glob.glob(f"work/tts2/{ln['n']:02d}_{ln['who']}_t*.wav")):
+        for f in sorted(glob.glob(f"work/{SET}/{ln['n']:02d}_{ln['who']}_t*.wav")):
             if str(ln["n"]) in PICK and int(f[-5]) != PICK[str(ln["n"])]: continue
             a, sr, a16 = read16k(f); new, score, worst, se = retime(ln, a, sr, a16); heard = hear(a16); e = wer(norm(sc["spoken"]), norm(heard))
             rate = len(se) / max(0.1, se[-1][1] - se[0][0]); rank = (-e, worst, score)                 # fewest wrong words first, then the best worst word
@@ -165,7 +167,7 @@ if __name__ == "__main__":
             report.append(row)
             if best is None or rank > best[0]: best = (rank, f, new, row)
         _, f, new, row = best
-        out.append(dict(n=ln["n"], who=ln["who"], voice="chatterbox:" + ln["voice"], caption=ln["caption"], spoken=sc["spoken"], phonemes=ln["phonemes"], wav=f, take=int(f[-5]), **new))
+        out.append(dict(n=ln["n"], who=ln["who"], voice=sc.get("voice", "chatterbox:" + ln["voice"]), caption=ln["caption"], spoken=sc["spoken"], phonemes=ln["phonemes"], wav=f, take=int(f[-5]), **new))
         print(f"   -> take {f[-5]}", flush=True)
-    json.dump(out, open("work/tts2/lines.json", "w"), ensure_ascii=False); json.dump(report, open("work/tts2/takes.json", "w"), ensure_ascii=False, indent=1)
+    json.dump(out, open(f"work/{SET}/lines.json", "w"), ensure_ascii=False); json.dump(report, open(f"work/{SET}/takes.json", "w"), ensure_ascii=False, indent=1)
     print("total", round(sum(o["dur"] for o in out), 1), "s")

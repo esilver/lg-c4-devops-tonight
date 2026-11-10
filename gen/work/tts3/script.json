@@ -1,0 +1,98 @@
+[
+ {
+  "n": 0,
+  "who": "paige",
+  "voice": "Harper",
+  "spoken": "Good evening, this is DevOps Tonight. I'm Paige Duty, and yes, I am on call."
+ },
+ {
+  "n": 1,
+  "who": "cy",
+  "voice": "Miles",
+  "spoken": "And I'm Sy DeCar. It is twenty twenty-six, and production is, for the moment, up."
+ },
+ {
+  "n": 2,
+  "who": "paige",
+  "voice": "Harper",
+  "spoken": "Our top story: an A.I. agent opened forty pull requests overnight. A second agent approved them. A human is now being paged."
+ },
+ {
+  "n": 3,
+  "who": "cy",
+  "voice": "Miles",
+  "spoken": "Meanwhile, a routine Friday deploy is under way in U.S. east one. Dee Ploy is at the scene. Dee?"
+ },
+ {
+  "n": 4,
+  "who": "dee",
+  "voice": "Easton",
+  "spoken": "Thanks, Sy. The pipeline behind me has been green for nine minutes, and nobody here trusts it."
+ },
+ {
+  "n": 5,
+  "who": "dee",
+  "voice": "Easton",
+  "spoken": "Engineers have checked the dashboards, the rollback plan, and D.N.S. Sources say it is always D.N.S."
+ },
+ {
+  "n": 6,
+  "who": "cy",
+  "voice": "Miles",
+  "spoken": "Dee, did anyone suggest waiting until Monday?"
+ },
+ {
+  "n": 7,
+  "who": "dee",
+  "voice": "Easton",
+  "spoken": "One person did, Sy. They have been moved to the platform team. Back to you."
+ },
+ {
+  "n": 8,
+  "who": "paige",
+  "voice": "Harper",
+  "spoken": "Brave work. Now the cloud forecast, with Sunny Uptime."
+ },
+ {
+  "n": 9,
+  "who": "sunny",
+  "voice": "Juniper",
+  "spoken": "Thanks, Paige. Pods are stuck pending across the north, while the auto scaler thinks about it."
+ },
+ {
+  "n": 10,
+  "who": "sunny",
+  "voice": "Juniper",
+  "spoken": "In the south, scattered five oh threes with a chance of re-tries. Four nines along the coast, and a high of nine thousand dollars in ee-gress."
+ },
+ {
+  "n": 11,
+  "who": "cy",
+  "voice": "Miles",
+  "spoken": "Joining us is Why A Mel, Staff Yammel Engineer. With agents writing the config now, is your job safe?"
+ },
+ {
+  "n": 12,
+  "who": "mel",
+  "voice": "Master Aldric",
+  "spoken": "Sy, the agent writes four thousand lines of yammel a day. Someone still has to find the one wrong indent."
+ },
+ {
+  "n": 13,
+  "who": "cy",
+  "voice": "Miles",
+  "spoken": "Chilling. Thank you for your time."
+ },
+ {
+  "n": 14,
+  "who": "paige",
+  "voice": "Harper",
+  "spoken": "That's all for tonight. Remember: you build it, you run it, and fin ops will ask what it cost."
+ },
+ {
+  "n": 15,
+  "who": "cy",
+  "voice": "Miles",
+  "spoken": "From all of us in the control plane, good night, and may your pager stay quiet."
+ }
+]

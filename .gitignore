@@ -12,3 +12,5 @@ gen/venv3
 tests/output/*.wav
 tests/output/*.f32
 gen/venv4
+gen/venv5
+gen/venv6

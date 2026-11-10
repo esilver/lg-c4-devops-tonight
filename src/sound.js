@@ -51,9 +51,12 @@ function sndCreate() {
   const studio = G(1); sndChain([studio, sndFilter(ac, 'highpass', 70, 0.7), snd.voice]); studio.connect(rev);
   const field = G(1), fmic = sndFilter(ac, 'highpass', 170, 0.7); sndChain([field, fmic, sndFilter(ac, 'peaking', 2600, 0.9, 3), sndFilter(ac, 'lowpass', 7500, 0.7), snd.voice]);
   const slap = ac.createDelay(0.2); slap.delayTime.value = 0.058; sndChain([field, slap, sndFilter(ac, 'lowpass', 2400, 0.5), G(0.09), fmic]);          // the reporter's voice comes back faintly off the building
-  const shaper = ac.createWaveShaper(), curve = new Float32Array(257); for (let i = 0; i < 257; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(2.2 * x) / Math.tanh(2.2); } shaper.curve = curve;
-  const call = G(1), cmic = sndFilter(ac, 'highpass', 280, 0.7); sndChain([call, cmic, sndFilter(ac, 'lowpass', 3600, 0.7), sndFilter(ac, 'peaking', 900, 1.2, 4), shaper, G(0.7), snd.voice]);
-  const box = ac.createDelay(0.2), fb = G(0.3); box.delayTime.value = 0.027; sndChain([call, box, sndFilter(ac, 'lowpass', 3000, 0.5), G(0.3), cmic]); sndChain([box, fb, box]);      // a small bare room around a laptop microphone
+  const shaper = ac.createWaveShaper(), curve = new Float32Array(257); for (let i = 0; i < 257; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(1.1 * x) / Math.tanh(1.1); } shaper.curve = curve;
+  // The guest is on a video call: a laptop microphone in a small bare room. Today's calls carry nearly the whole voice, so this is
+  // a little boxy and a little close, not a telephone. (The first version cut everything above 3.6 kHz and overdrove it, which
+  // made the one voice that passes through it the worst-sounding in the bulletin.)
+  const call = G(1), cmic = sndFilter(ac, 'highpass', 120, 0.7); sndChain([call, cmic, sndFilter(ac, 'lowpass', 6800, 0.7), sndFilter(ac, 'peaking', 450, 1.0, 2.5), shaper, G(0.92), snd.voice]);
+  const box = ac.createDelay(0.2), fb = G(0.28); box.delayTime.value = 0.027; sndChain([call, box, sndFilter(ac, 'lowpass', 3000, 0.5), G(0.2), cmic]); sndChain([box, fb, box]);
   snd.chain = { studio, field, call };
   // looping beds, silent until a scene asks for them
   const white = sndNoise(ac, 2, false), brown = sndNoise(ac, 4, true); snd.white = white;

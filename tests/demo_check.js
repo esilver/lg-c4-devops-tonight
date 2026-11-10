@@ -16,10 +16,11 @@ const { chromium, devices } = require('playwright');
     await p.click('[data-voices=first]'); await p.waitForTimeout(300);
     const lenFirst = await p.evaluate(() => total); await p.evaluate(() => { st.vt = 2.4; }); await p.waitForTimeout(200);
     if (name === 'desktop') await p.screenshot({ path: 'demo_first_voices.png', fullPage: false });
+    await p.click('[data-voices=second]'); await p.waitForTimeout(200); const lenSecond = await p.evaluate(() => total);
     await p.click('[data-voices=new]'); await p.keyboard.press('3'); await p.waitForTimeout(200);
     await p.evaluate(() => { document.getElementById('o-closeup').click(); st.vt = 3.1; }); await p.waitForTimeout(300);
     if (name === 'desktop') await p.screenshot({ path: 'demo_closeup.png', fullPage: false });
-    console.log(name, '| sideways overflow px:', wide, '| playlist seconds, new voices', lenNew.toFixed(2), 'first voices', lenFirst.toFixed(2), '| errors:', errs.length ? errs.slice(0, 4) : 'none');
+    console.log(name, '| sideways overflow px:', wide, '| playlist seconds: Phonon', lenNew.toFixed(2), 'Chatterbox', lenSecond.toFixed(2), 'Kokoro', lenFirst.toFixed(2), '| errors:', errs.length ? errs.slice(0, 4) : 'none');
     await ctx.close();
   }
   await b.close();

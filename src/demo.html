@@ -81,7 +81,7 @@
           <button type="button" data-speed="1" aria-pressed="true">1×</button><button type="button" data-speed="0.5" aria-pressed="false">½×</button><button type="button" data-speed="0.25" aria-pressed="false">¼×</button>
         </span>
         <span class="seg" role="group" aria-label="Voices" id="voices">
-          <button type="button" data-voices="new" aria-pressed="true">New voices</button><button type="button" data-voices="first" aria-pressed="false">First voices</button>
+          <button type="button" data-voices="new" aria-pressed="true">Phonon (new)</button><button type="button" data-voices="second" aria-pressed="false">Chatterbox</button><button type="button" data-voices="first" aria-pressed="false">Kokoro</button>
         </span>
       </div>
       <div class="card">
@@ -95,7 +95,7 @@
           <span><i style="background: var(--s3)"></i>Brows (raised above the line, lowered below) and head (a dip is a nod), both following the voice</span>
         </div>
       </div>
-      <p class="note">Keys: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> step one frame, <kbd>1</kbd>–<kbd>5</kbd> choose a presenter. Click the curves to jump within the line. Sound starts off because browsers need a click first. <b>New voices / First voices</b> plays the same lines in either set of recordings, each with the lips timed to it. At half and quarter speed the voice slows and drops in pitch. The voices are synthetic, the presenters are AI-generated stills, and none is a real person.</p>
+      <p class="note">Keys: <kbd>Space</kbd> play or pause, <kbd>←</kbd> <kbd>→</kbd> step one frame, <kbd>1</kbd>–<kbd>5</kbd> choose a presenter. Click the curves to jump within the line. Sound starts off because browsers need a click first. <b>Phonon / Chatterbox / Kokoro</b> plays the same lines as spoken by three different speech models, each with the lips timed to it. Phonon is the newest and is what the TV page uses; Kokoro was the first. At half and quarter speed the voice slows and drops in pitch. The voices are synthetic, the presenters are AI-generated stills, and none is a real person.</p>
     </div>
     <div class="col">
       <div class="card"><h2>Presenter</h2><div class="people" id="people"></div></div>
@@ -121,7 +121,8 @@ const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', MONO = 
 let switchedAt = -10;
 /*NEWS*/
 /*SOUND*/
-const SPEECH_FIRST = /*SPEECH_FIRST*/null;         // the first voices, for comparison: same lines, same faces, timed to those recordings
+// the two earlier sets of voices, for comparison: same lines, same faces, each timed to its own recordings
+const VOICES = { new: SPEECH, second: /*SPEECH_SECOND*/null, first: /*SPEECH_FIRST*/null };
 /* ───────────────────────── Demo ───────────────────────── */
 const ORDER = ['paige', 'cy', 'dee', 'sunny', 'mel'], GAP = 0.45, FPS = 30;
 const st = { who: 'paige', vt: 0, playing: !matchMedia('(prefers-reduced-motion: reduce)').matches, speed: 1, closeup: false, head: true, camera: true, captions: true, grain: true };
@@ -244,13 +245,12 @@ $('back').onclick = () => step(-1); $('fwd').onclick = () => step(1);
 $('scrub').oninput = e => { st.vt = e.target.value / 1000; };
 for (const el of document.querySelectorAll('[data-speed]')) el.onclick = () => { st.speed = +el.dataset.speed; for (const o of document.querySelectorAll('[data-speed]')) o.setAttribute('aria-pressed', o === el); };
 // Voices: the same lines in the two sets of recordings. Each set carries its own timing, so the whole show is laid out again.
-if (!SPEECH_FIRST) $('voices').hidden = true;
-for (const el of document.querySelectorAll('[data-voices]')) el.onclick = () => {
-  const [, , i] = where(st.vt), set = el.dataset.voices === 'first' ? SPEECH_FIRST : SPEECH; if (!set) return;
+for (const el of document.querySelectorAll('[data-voices]')) { if (!VOICES[el.dataset.voices]) el.hidden = true; el.onclick = () => {
+  const [, , i] = where(st.vt), set = VOICES[el.dataset.voices]; if (!set) return;
   buildShow(set); curves = null; sndStop('cur'); if (snd.ac) sndLoad(set);
   choose(st.who); st.vt = starts[Math.min(i, starts.length - 1)];
   for (const o of document.querySelectorAll('[data-voices]')) o.setAttribute('aria-pressed', o === el);
-};
+}; }
 for (const k of ['closeup', 'head', 'camera', 'captions', 'grain']) $('o-' + k).onchange = e => { st[k] = e.target.checked; };
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' && e.target.type === 'range') return;
