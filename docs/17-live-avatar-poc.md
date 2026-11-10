@@ -25,7 +25,7 @@ Published as a private page: https://claude.ai/artifact/SEzGoZDjdWwejkZzg7agtC (
 The bulletin's lips come from recordings that were measured ahead of time. Here nothing exists ahead of time, and
 the page cannot see the audio of either voice. So:
 
-1. **A guess at the sounds from the spelling** (`sounds`). About forty rules of English spelling give the engine's
+1. **A guess at the sounds from the spelling** (`sounds`). About sixty rules of English spelling give the engine's
    own sound symbols. It does not need to get the word right, only the mouth: where the lips meet, where they round,
    where the jaw drops. Little words are reduced, the first vowel of other words is stressed.
 2. **A plan in time** (`plan`). Each sound gets a length, scaled to an assumed pace of thirteen letters a second, with
