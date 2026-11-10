@@ -11,3 +11,4 @@ assets_fake.json
 gen/venv3
 tests/output/*.wav
 tests/output/*.f32
+gen/venv4

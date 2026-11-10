@@ -1,0 +1,5 @@
+(progress bars removed)
+[notice] A new release of pip is available: 24.0 -> 26.3
+[notice] To update, run: python3.11 -m pip install --upgrade pip
+ok 2.6.0+cpu 2.6.0+cpu
+finished

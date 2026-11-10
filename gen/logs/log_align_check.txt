@@ -1,0 +1,19 @@
+(progress bars removed)
+ 0 paige match  -0.11 worst word  -0.92
+ 1 cy    match  -0.24 worst word  -2.30
+ 2 paige match  -0.47 worst word  -4.82
+ 3 cy    match  -0.30 worst word  -1.45
+ 4 dee   match  -0.47 worst word  -3.41
+ 5 dee   match  -0.36 worst word  -1.08
+ 6 cy    match  -0.07 worst word  -0.23
+ 7 dee   match  -0.44 worst word  -1.23
+ 8 paige match  -0.43 worst word  -2.13
+ 9 sunny match  -0.40 worst word  -3.02
+10 sunny match  -0.32 worst word  -1.75
+11 cy    match  -0.24 worst word  -2.81
+12 mel   match  -0.16 worst word  -2.86
+13 cy    match  -0.72 worst word  -2.30
+14 paige match  -0.37 worst word  -3.59
+15 cy    match  -0.35 worst word  -2.87
+844 phonemes, start: aligner minus model -73 ms; scatter around that: median 20 ms, 90% within 55 ms
+844 phonemes, centre: aligner minus model -62 ms; scatter around that: median 15 ms, 90% within 47 ms

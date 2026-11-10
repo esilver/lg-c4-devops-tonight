@@ -1,0 +1,19 @@
+(progress bars removed)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+/home/user/lg-c4-devops-tonight/gen/venv4/lib/python3.11/site-packages/diffusers/models/lora.py:393: FutureWarning: `LoRACompatibleLinear` is deprecated and will be removed in version 1.0.0. Use of `LoRACompatibleLinear` is deprecated. Please switch to PEFT backend by installing PEFT: `pip install peft`.
+  deprecate("LoRACompatibleLinear", "1.0.0", deprecation_message)
+loaded PerthNet (Implicit) at step 250,000
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+/usr/lib/python3.11/contextlib.py:105: FutureWarning: `torch.backends.cuda.sdp_kernel()` is deprecated. In the future, this context manager will be removed. Please see `torch.nn.attention.sdpa_kernel()` for the new context manager, with updated signature.
+  self.gen = func(*args, **kwds)
+`sdpa` attention does not support `output_attentions=True`. Please set your attention to `eager` if you want any of these features.
+ 1 cy    take 1:  5.56 s in  274 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 1 cy    take 2:  4.88 s in   19 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 1 cy    take 3:  5.52 s in   21 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 1 cy    take 4:  5.08 s in   20 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 1 cy    take 5:  5.44 s in   21 s
+done

@@ -1,0 +1,73 @@
+(progress bars removed)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+/home/user/lg-c4-devops-tonight/gen/venv4/lib/python3.11/site-packages/diffusers/models/lora.py:393: FutureWarning: `LoRACompatibleLinear` is deprecated and will be removed in version 1.0.0. Use of `LoRACompatibleLinear` is deprecated. Please switch to PEFT backend by installing PEFT: `pip install peft`.
+  deprecate("LoRACompatibleLinear", "1.0.0", deprecation_message)
+loaded PerthNet (Implicit) at step 250,000
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+/usr/lib/python3.11/contextlib.py:105: FutureWarning: `torch.backends.cuda.sdp_kernel()` is deprecated. In the future, this context manager will be removed. Please see `torch.nn.attention.sdpa_kernel()` for the new context manager, with updated signature.
+  self.gen = func(*args, **kwds)
+`sdpa` attention does not support `output_attentions=True`. Please set your attention to `eager` if you want any of these features.
+ 0 paige take 1:  5.38 s in   26 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 0 paige take 2:  5.10 s in   21 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 1 cy    take 1:  5.12 s in   19 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 1 cy    take 2:  5.08 s in   20 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 2 paige take 1:  9.06 s in   33 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 2 paige take 2:  8.06 s in   30 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 3 cy    take 1:  7.20 s in   26 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 3 cy    take 2:  6.80 s in   26 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 4 dee   take 1:  5.30 s in   20 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 4 dee   take 2:  4.94 s in   19 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 5 dee   take 1:  7.18 s in   27 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 5 dee   take 2:  6.74 s in   24 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 6 cy    take 1:  3.24 s in   14 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 6 cy    take 2:  3.52 s in   15 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 7 dee   take 1:  4.42 s in   16 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 7 dee   take 2:  4.38 s in   17 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 8 paige take 1:  3.98 s in   18 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 8 paige take 2:  4.14 s in   17 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 9 sunny take 1:  5.30 s in   22 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+ 9 sunny take 2:  5.58 s in   23 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+10 sunny take 1:  8.74 s in   34 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+10 sunny take 2:  8.82 s in   40 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+11 cy    take 1:  6.92 s in   26 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+11 cy    take 2:  7.88 s in   34 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+12 mel   take 1:  7.10 s in   30 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+12 mel   take 2:  8.02 s in   29 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+13 cy    take 1:  2.12 s in   11 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+13 cy    take 2:  2.56 s in   13 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+14 paige take 1:  5.50 s in   23 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+14 paige take 2:  5.62 s in  153 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+15 cy    take 1:  4.84 s in   20 s
+WARNING:root:Reference mel length is not equal to 2 * reference token length.
+15 cy    take 2:  4.68 s in   19 s
+done
