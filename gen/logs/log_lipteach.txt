@@ -3,3 +3,14 @@
 02 paige 393 frames, opening 0.054 to 0.243
 03 cy    341 frames, opening 0.046 to 0.286
 04 dee   236 frames, opening 0.000 to 0.112
+05 dee   313 frames, opening 0.000 to 0.165
+06 cy    146 frames, opening 0.033 to 0.257
+07 dee   214 frames, opening 0.000 to 0.125
+08 paige 191 frames, opening 0.051 to 0.247
+09 sunny 268 frames, opening 0.029 to 0.261
+10 sunny 440 frames, opening 0.034 to 0.221
+11 cy    325 frames, opening 0.036 to 0.294
+12 mel   375 frames, opening 0.000 to 0.221
+13 cy    102 frames, opening 0.046 to 0.254
+14 paige 278 frames, opening 0.051 to 0.251
+15 cy    208 frames, opening 0.040 to 0.271

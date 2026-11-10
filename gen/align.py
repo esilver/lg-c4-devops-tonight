@@ -123,7 +123,7 @@ def hear(a16):
 SAME = [("twenty twenty six", "2026"), ("a i", "ai"), ("u s", "us"), ("d n s", "dns"), ("five oh threes", "503s"), ("nine thousand dollars", "9000"), ("why a mel", "ya mel"), ("y a mel", "ya mel"),
         ("sy", "cy"), ("sai", "cy"), ("sigh", "cy"), ("si", "cy"), ("psy", "cy"), ("dekkar", "dekar"), ("decar", "dekar"), ("de car", "dekar"), ("decker", "dekar"), ("side dekar", "cy dekar"), ("sidecar", "cy dekar"), ("side car", "cy dekar"),
         ("yammel", "yaml"), ("yamil", "yaml"), ("yamel", "yaml"), ("yamal", "yaml"), ("fin ops", "finops"), ("phenops", "finops"), ("auto scaler", "autoscaler"), ("one", "1"), ("four", "4"), ("forty", "40"), ("nine", "9"),
-        ("four thousand", "4000"), ("4 thousand", "4000"), ("under way", "underway"), ("dee ploy", "deploy"), ("d ploy", "deploy"), ("d", "dee"), ("doody", "duty"), ("yml", "ya mel"), ("yaml staff", "ya mel staff"), ("riding", "writing"), ("re tries", "retries"), ("ee gress", "egress"), ("page", "paige"), ("yamal", "yaml"), ("9s", "nines"), ("4 nines", "4 nines"), ("had", "have")]
+        ("four thousand", "4000"), ("4 thousand", "4000"), ("under way", "underway"), ("dee ploy", "deploy"), ("d ploy", "deploy"), ("d", "dee"), ("doody", "duty"), ("dooty", "duty"), ("tchilling", "chilling"), ("yml", "ya mel"), ("yaml staff", "ya mel staff"), ("riding", "writing"), ("re tries", "retries"), ("ee gress", "egress"), ("page", "paige"), ("yamal", "yaml"), ("9s", "nines"), ("4 nines", "4 nines"), ("had", "have")]
 def norm(s):
     s = re.sub(r"[^a-z0-9 ]", "", s.lower().replace("-", " ").replace("$", "")); s = " " + " ".join(s.split()) + " "
     for a, b in SAME: s = s.replace(f" {a} ", f" {b} ")

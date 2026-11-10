@@ -3,10 +3,10 @@ Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF
 Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of the `task` and `language` flags/config options.
 A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensLogitsProcessor'> to see related `.generate()` flags.
 A custom logits processor of type <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> has been passed to `.generate()`, but it was also created in `.generate()`, given its parameterization. The custom <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> will take precedence. Please check the docstring of <class 'transformers.generation.logits_process.SuppressTokensAtBeginLogitsProcessor'> to see related `.generate()` flags.
- 0 paige t1 errors 1 match  -0.33 worst  -1.93 rate  9.9/s lead 0.15 tail 0.56 | Good evening, this is DevOps Tonight. I'm Paige Judy, and yes, I am on call.
- 0 paige t2 errors 1 match  -0.11 worst  -0.69 rate 10.3/s lead 0.19 tail 0.60 | Good evening, this is DevOps Tonight. I'm Paige Judy, and yes, I am on call.
- 0 paige t3 errors 0 match  -0.10 worst  -0.76 rate  9.7/s lead 0.11 tail 0.55 | Good evening, this is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
-   -> take 3
+ 0 paige t1 errors 0 match  -0.08 worst  -0.27 rate  9.9/s lead 0.16 tail 0.59 | Good evening, this is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
+ 0 paige t2 errors 0 match  -0.09 worst  -0.34 rate  9.9/s lead 0.18 tail 0.57 | Good evening, this is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
+ 0 paige t3 errors 0 match  -0.11 worst  -1.03 rate  9.7/s lead 0.11 tail 0.55 | Good evening, this is DevOps Tonight. I'm Paige Doody, and yes, I am on call.
+   -> take 1
  1 cy    t1 errors 3 match  -0.28 worst  -2.09 rate 12.8/s lead 0.09 tail 0.66 | and I'm side-to-car. It is 2026 and production is, for the moment, up.
  1 cy    t2 errors 3 match  -0.26 worst  -2.20 rate 12.6/s lead 0.10 tail 0.66 | and I'm side a car. It is 2026 and production is for the moment up.
  1 cy    t3 errors 3 match  -0.36 worst  -2.53 rate 13.1/s lead 0.10 tail 0.67 | and I'm side to car. It is 2026 and production is for the moment up.
@@ -55,10 +55,10 @@ A custom logits processor of type <class 'transformers.generation.logits_process
 12 mel   t2 errors 0 match  -0.27 worst  -2.59 rate  9.4/s lead 0.14 tail 0.62 | Sigh, the agent writes 4,000 lines of YAML a day. Someone still has to find the one wrong indent.
 12 mel   t3 errors 0 match  -0.19 worst  -2.61 rate  9.4/s lead 0.14 tail 0.55 | Si, the agent writes 4,000 lines of YAML a day. Someone still has to find the one wrong indent.
    -> take 2
-13 cy    t1 errors 0 match  -0.90 worst  -2.24 rate 11.2/s lead 0.10 tail 0.67 | Chilling. Thank you for your time.
-13 cy    t2 errors 1 match  -1.07 worst  -2.13 rate 11.9/s lead 0.11 tail 0.69 | Shilling. Thank you for your time.
-13 cy    t3 errors 1 match  -1.04 worst  -2.06 rate 12.0/s lead 0.11 tail 0.70 | Shilling. Thank you for your time.
-   -> take 1
+13 cy    t1 errors 0 match  -0.87 worst  -2.30 rate 10.8/s lead 0.11 tail 0.67 | Chilling. Thank you for your time.
+13 cy    t2 errors 0 match  -0.90 worst  -2.22 rate 11.8/s lead 0.12 tail 0.67 | Chilling. Thank you for your time.
+13 cy    t3 errors 0 match  -0.83 worst  -2.08 rate 11.7/s lead 0.11 tail 0.66 | Chilling. Thank you for your time.
+   -> take 3
 14 paige t1 errors 1 match  -0.31 worst  -2.50 rate 11.2/s lead 0.14 tail 0.58 | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it costs.
 14 paige t2 errors 0 match  -0.33 worst  -2.96 rate 11.5/s lead 0.13 tail 0.56 | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it cost.
 14 paige t3 errors 0 match  -0.29 worst  -2.74 rate 11.5/s lead 0.11 tail 0.58 | That's all for tonight. Remember, you build it, you run it, and FinOps will ask what it cost.

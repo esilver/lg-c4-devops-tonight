@@ -12,7 +12,7 @@ The text is respelled where a name or abbreviation must sound a particular way."
 import os, sys, json, time, numpy as np, soundfile as sf, ptts
 CAST = dict(paige="Harper", cy="Miles", dee="Easton", sunny="Juniper", mel="Master Aldric")
 LINES = [
- ("paige", "Good evening, this is DevOps Tonight. I'm Paige Duty, and yes, I am on call."),
+ ("paige", "Good evening, this is DevOps Tonight. I'm Paige Dooty, and yes, I am on call."),
  ("cy",    "And I'm Sy DeCar. It is twenty twenty-six, and production is, for the moment, up."),
  ("paige", "Our top story: an A.I. agent opened forty pull requests overnight. A second agent approved them. A human is now being paged."),
  ("cy",    "Meanwhile, a routine Friday deploy is under way in U.S. east one. Dee Ploy is at the scene. Dee?"),
@@ -25,7 +25,7 @@ LINES = [
  ("sunny", "In the south, scattered five oh threes with a chance of re-tries. Four nines along the coast, and a high of nine thousand dollars in ee-gress."),
  ("cy",    "Joining us is Why A Mel, Staff Yammel Engineer. With agents writing the config now, is your job safe?"),
  ("mel",   "Sy, the agent writes four thousand lines of yammel a day. Someone still has to find the one wrong indent."),
- ("cy",    "Chilling. Thank you for your time."),
+ ("cy",    "Tchilling. Thank you for your time."),
  ("paige", "That's all for tonight. Remember: you build it, you run it, and fin ops will ask what it cost."),
  ("cy",    "From all of us in the control plane, good night, and may your pager stay quiet."),
 ]

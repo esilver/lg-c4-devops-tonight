@@ -55,7 +55,7 @@ function sndCreate() {
   // The guest is on a video call: a laptop microphone in a small bare room. Today's calls carry nearly the whole voice, so this is
   // a little boxy and a little close, not a telephone. (The first version cut everything above 3.6 kHz and overdrove it, which
   // made the one voice that passes through it the worst-sounding in the bulletin.)
-  const call = G(1), cmic = sndFilter(ac, 'highpass', 120, 0.7); sndChain([call, cmic, sndFilter(ac, 'lowpass', 6800, 0.7), sndFilter(ac, 'peaking', 450, 1.0, 2.5), shaper, G(0.92), snd.voice]);
+  const call = G(1), cmic = sndFilter(ac, 'highpass', 120, 0.7); sndChain([call, cmic, sndFilter(ac, 'lowpass', 6800, 0.7), sndFilter(ac, 'peaking', 450, 1.0, 2.5), shaper, G(0.68), snd.voice]);
   const box = ac.createDelay(0.2), fb = G(0.28); box.delayTime.value = 0.027; sndChain([call, box, sndFilter(ac, 'lowpass', 3000, 0.5), G(0.2), cmic]); sndChain([box, fb, box]);
   snd.chain = { studio, field, call };
   // looping beds, silent until a scene asks for them
@@ -198,14 +198,14 @@ function soundFrame(frameT, eye) {
    though videos play. Two things lift that, and both must happen inside the tap: asking for a "playback" audio session
    (iOS 17 and later), and, for older systems, keeping a silent <audio> element playing, which puts the page in the
    same class as a video. Neither does anything on other devices. */
+function sndSession() { try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {} }
 function sndUnlock() {
-  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (ios && !snd.keep) {
-    try {                                                        // half a second of silence as a WAV, looped
-      const n = 4000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), put = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };
+    try {                                                        // half a second of silence as a plain 16-bit WAV, looped
+      const n = 22050, b = new Uint8Array(44 + n), v = new DataView(b.buffer), put = (o, t) => { for (let i = 0; i < t.length; i++) b[o + i] = t.charCodeAt(i); };
       put(0, 'RIFF'); v.setUint32(4, 36 + n, true); put(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
-      v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); put(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+      v.setUint32(24, 22050, true); v.setUint32(28, 44100, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); put(36, 'data'); v.setUint32(40, n, true);
       const el = snd.keep = document.createElement('audio'); el.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
       el.loop = true; el.preload = 'auto'; el.setAttribute('playsinline', ''); el.setAttribute('x-webkit-airplay', 'deny');
     } catch (e) { snd.keep = null; }
@@ -218,6 +218,7 @@ function sndUnlock() {
 function sndStatus() { return !snd.ac || !snd.on ? 'off' : snd.ac.state !== 'running' ? 'blocked' : snd.ready ? 'on' : 'loading'; }
 const SND_LABEL = { off: 'Sound: off', on: 'Sound: on', loading: 'Sound: loading', blocked: 'Sound: tap again' };
 function soundToggle() {
+  sndSession();                                                  // before the audio context exists, so it starts life in the right class
   if (!snd.ac) { if (!sndCreate()) return false; sndLoad(); }
   const stuck = snd.on && snd.ac.state !== 'running';             // a tap while blocked is another try, not "off"
   if (!stuck) snd.on = !snd.on;

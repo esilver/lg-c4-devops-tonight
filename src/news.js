@@ -151,13 +151,31 @@ function buildSpeech(b) {
     const f = sp.lip.fps, dec = (str, span, lo) => Float32Array.from(str, ch => (ch.charCodeAt(0) - 40) / 85 * span + lo), to = dec(sp.lip.o, 1.42, -0.12), ts = dec(sp.lip.s, 2, -1);
     const at = (v, t) => { const x = clamp((t - L) * f, 0, v.length - 1.001), i = Math.floor(x); return v[i] + (v[i + 1] - v[i]) * (x - i); };
     for (let i = 0; i < n; i++) { const t = i * DT, on = t >= L && t <= L + sp.len, br = 0.07 * rise(t, first - 0.3, first - 0.07) * (1 - rise(t, first - 0.02, first + 0.06)); b.J[i] = on ? Math.max(at(to, t), br) : br; b.S[i] = on ? at(ts, t) : 0; }
+    // In a pause the mouth comes to rest whatever the reference drew (it tends to leave the lips apart): nearly shut in a
+    // long pause, a little parted in a short one, shut before the first sound and after the last.
+    for (const g of segs) if (g.pause) {
+      const keep = g.d > 0.5 ? 0.1 : 0.4;
+      for (let i = Math.max(0, Math.floor((g.t0 - 0.02) / DT)); i < Math.min(n, Math.ceil((g.t0 + g.d + 0.02) / DT)); i++) { const t = i * DT; b.J[i] *= 1 - (1 - keep) * rise(t, g.t0, g.t0 + 0.09) * (1 - rise(t, g.t0 + g.d - 0.09, g.t0 + g.d)); }
+    }
+    for (let i = 0; i < n; i++) { const t = i * DT; if (t < first) b.J[i] = Math.min(b.J[i], 0.07 + 0.6 * rise(t, first - 0.06, first)); if (t > lastEnd) b.J[i] *= 1 - rise(t, lastEnd + 0.03, lastEnd + 0.2); }
     smooth(b.J, 0.01); smooth(b.S, 0.025); b.taught = true;
   }
   // lip closures: shut by the time the sound starts, held to the release, never shorter than two frames of video
   const C = b.C = new Float32Array(n);
   for (const g of segs) if (g.c) {
-    const h0 = g.t0, h1 = Math.max(g.t0 + g.d * (g.ch === 'm' ? 1 : g.ch === 'p' ? 0.7 : 0.85), g.t0 + 0.055);
-    const rin = 0.05 + 0.07 * Math.min(1, samp(b.J, h0 - 0.05)), rout = 0.04 + 0.05 * Math.min(1, samp(b.J, h1 + 0.05));          // a wide-open mouth needs longer to shut
+    let h0 = g.t0, h1 = Math.max(g.t0 + g.d * (g.ch === 'm' ? 1 : g.ch === 'p' ? 0.7 : 0.85), g.t0 + 0.055);
+    let rin = 0.05 + 0.07 * Math.min(1, samp(b.J, h0 - 0.05)), rout = 0.04 + 0.05 * Math.min(1, samp(b.J, h1 + 0.05));          // a wide-open mouth needs longer to shut
+    if (b.taught) {
+      // With a reference the mouth already closes for these sounds, in its own time. All that is added is the guarantee
+      // that the lips truly meet for m, b and p: a short press in the middle of the sound, quick in and out so that a
+      // short vowel next to it is not swallowed. (The long ramps above did swallow them: the "o" of "DevOps" vanished.)
+      // For p and b the press sits just before the release at the end of the sound (the timing gives a "p" after a pause
+      // the whole pause, and a press in the middle of that shut an open mouth a fifth of a second early).
+      if (g.c < 1) continue;
+      if (g.ch === 'm') { h0 = g.t0 + 0.12 * g.d; h1 = Math.min(g.t0 + 0.85 * g.d, h0 + 0.12); } else { h1 = g.t0 + g.d - 0.025; h0 = Math.max(g.t0 + 0.12 * g.d, h1 - 0.07); }
+      if (h1 - h0 < 0.04) h0 = h1 - 0.04;
+      rin = 0.03 + 0.06 * clamp(samp(b.J, h0), 0, 1); rout = 0.03 + 0.04 * clamp(samp(b.J, h1), 0, 1);       // slower where the reference still has the mouth open
+    }
     for (let i = Math.max(0, Math.floor((h0 - rin) / DT)); i < Math.min(n, Math.ceil((h1 + rout) / DT)); i++) { const t = i * DT; C[i] = Math.max(C[i], g.c * rise(t, h0 - rin, h0) * (1 - rise(t, h1, h1 + rout))); }
   }
   smooth(C, 0.005);
