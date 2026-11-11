@@ -44,23 +44,31 @@ async function init(m) {
   const grab = async url => { const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); };
   const why = e => String(e && e.message || e).slice(0, 120);
   // Is the voice folder beside the page? (manifest.json is the last thing get_voice.py writes.)
-  step('files'); const man = local = await fetch(base + 'manifest.json').then(r => r.ok ? r.json() : null).catch(() => null);
+  // A published page says it has no such folder (m.folder === false), which saves asking for a file that is not there.
+  step('files'); const man = local = m.folder === false ? null : await fetch(base + 'manifest.json').then(r => r.ok ? r.json() : null).catch(() => null);
   for (const [k, v] of Object.entries(m.voices || {})) voices[k] = v;
   // Which engine. The full-precision model (326 MB; the 8-bit one is 92 MB) can run on a GPU where the browser offers
   // one (WebGPU), and that is many times faster than the processor. The 8-bit model only runs on the processor.
   const size = m.model ? m.model.length : man ? man.bytes : 0, full = size > 2e8;
   const adapter = navigator.gpu ? await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null) : null;
   const gpu = navigator.gpu ? (adapter ? 'yes' : 'no adapter') : 'no'; let engine = full && adapter && m.gpu !== false ? 'gpu' : 'cpu', gpuWhy = '';
-  // One engine's runtime: the library, its WebAssembly file, and where its glue code is. null if the WebAssembly file cannot be had.
-  const runtime = async eng => {
-    const f = eng === 'gpu' ? ['ort-gpu.js', 'ort.webgpu.min.mjs', 'ort-gpu-wasm.js', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-gpu.wasm', 'ort-wasm-simd-threaded.asyncify.wasm']
-      : ['ort.js', 'ort.wasm.min.mjs', 'ort-wasm.js', 'ort-wasm-simd-threaded.mjs', 'ort-wasm.wasm', 'ort-wasm-simd-threaded.wasm'];
-    let o; try { o = await import(man ? base + f[0] : ORT + f[1]); } catch (e) { throw new Error('the speech runtime could not be loaded from the ' + (man ? 'page' : 'CDN') + ' (' + why(e) + ')'); }
-    const wasm = (eng === 'cpu' && m.wasm) || await grab(man ? base + f[4] : ORT + f[5]).catch(() => null);
+  // One engine's runtime: the library, its WebAssembly file, and where its glue code is. The GPU runtime comes in two
+  // builds: a smaller one (18 MB) for browsers that can suspend WebAssembly (JSPI), and a larger one (29 MB) for the
+  // rest. A viewer's frame may refuse to fetch the larger; then the smaller is tried, and failing both the viewer can
+  // add the file by hand (m.gpuWasm). null if no WebAssembly file can be had.
+  const BUILDS = { cpu: ['ort.js', 'ort.wasm.min.mjs', 'ort-wasm.js', 'ort-wasm-simd-threaded.mjs', 'ort-wasm.wasm', 'ort-wasm-simd-threaded.wasm'],
+    jspi: ['ort-jspi.js', 'ort.jspi.min.mjs', 'ort-jspi-wasm.js', 'ort-wasm-simd-threaded.jspi.mjs', 'ort-jspi.wasm', 'ort-wasm-simd-threaded.jspi.wasm'],
+    asyncify: ['ort-gpu.js', 'ort.webgpu.min.mjs', 'ort-gpu-wasm.js', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-gpu.wasm', 'ort-wasm-simd-threaded.asyncify.wasm'] };
+  const kinds = typeof WebAssembly.Suspending === 'function' ? ['jspi', 'asyncify'] : ['asyncify']; let gpuKind = '', gpuNeed = '';
+  const build = async kind => {
+    const f = BUILDS[kind], given = kind === 'cpu' ? m.wasm : m.gpuWasm && m.gpuWasm.kind === kind ? m.gpuWasm.data : null;
+    const wasm = given || await grab(man ? base + f[4] : ORT + f[5]).catch(() => null);
     if (!wasm) return null;
+    let o; try { o = await import(man ? base + f[0] : ORT + f[1]); } catch (e) { throw new Error('the speech runtime could not be loaded from the ' + (man ? 'page' : 'CDN') + ' (' + why(e) + ')'); }
     o.env.wasm.wasmPaths = { mjs: man ? base + f[2] : ORT + f[3] }; o.env.wasm.wasmBinary = wasm; o.env.wasm.numThreads = threads;
     return o;
   };
+  const runtime = async eng => { if (eng === 'cpu') return build('cpu'); for (const k of kinds) { const o = await build(k); if (o) { gpuKind = k; return o; } } gpuNeed = kinds[0]; return null; };
   threads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;      // more than one thread needs an isolated page
   step('runtime'); from.runtime = man ? 'page' : 'cdn';
   if (engine === 'gpu') { ort = await runtime('gpu').catch(e => { gpuWhy = why(e); return null; }); if (!ort) { engine = 'cpu'; gpuWhy = gpuWhy || 'its runtime file could not be fetched'; } }
@@ -93,8 +101,10 @@ async function init(m) {
     if (bad || !(e > 0) || r.dur.some(d => !(d > 0))) throw new Error('the test line came out wrong');      // a GPU that computes this model badly gives noise or nothing
     return (performance.now() - t) / 1000;
   };
+  // (a GPU start that never finishes is given up after two minutes)
+  const limited = p => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('it did not start within two minutes')), 120000))]);
   step('starting'); let cold;
-  try { cold = await start(); }
+  try { cold = await (engine === 'gpu' ? limited(start()) : start()); }
   catch (e) {
     if (engine !== 'gpu') throw new Error('the model could not be started (' + why(e) + ')');
     gpuWhy = why(e); engine = 'cpu'; ort = await runtime('cpu'); if (!ort) throw new Error('the GPU could not run the model (' + gpuWhy + ') and the processor runtime could not be fetched');
@@ -106,7 +116,7 @@ async function init(m) {
   // two things worth knowing when the voice is slow: how fast this worker's core is at plain arithmetic, and whether a GPU is on offer
   const tl = performance.now(); let acc = 0; for (let i = 0; i < 3e7; i++) acc += Math.sqrt(i) * 1.0000001; const loop = performance.now() - tl + (acc < 0 ? 1 : 0);
   stage = 'ready'; post({ type: 'ready', rtf: (performance.now() - t) / 1000 / (r.wave.length / SR), threads, voices: names, from: from.runtime, model: bytes,
-    about: { cold, made, secs: r.wave.length / SR, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, gpu, engine, gpuWhy, full, loop, bytes: bytes.length } }, [bytes.buffer]);      // the runtime has its own copy now; the page may pass this one on
+    about: { cold, made, secs: r.wave.length / SR, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, gpu, engine, gpuWhy, gpuKind, gpuNeed, full, loop, bytes: bytes.length } }, [bytes.buffer]);      // the runtime has its own copy now; the page may pass this one on
 }
 async function voice(name) {
   if (!voices[name]) { if (!local) throw new Error('the voice ' + name + ' has not been added'); const r = await fetch(base + 'v_' + name + '.bin'); if (!r.ok) throw new Error('voice ' + name + ': HTTP ' + r.status); voices[name] = new Float32Array(await r.arrayBuffer()); }

@@ -9,7 +9,9 @@ checked by hash.
   avatar/voice/src/            the downloads, as they came
   avatar/voice/model.N.bin     the model cut into parts of at most 19 MB (a published page may hold files up to 20 MB)
   avatar/voice/ort.js, ort-wasm.js, ort-wasm.wasm, phonemizer.js       the two libraries, under names that end in .js
-  avatar/voice/ort-gpu.js, ort-gpu-wasm.js, ort-gpu.wasm               the same runtime built for a GPU (WebGPU)
+  avatar/voice/ort-jspi.js, ort-jspi-wasm.js, ort-jspi.wasm            the same runtime built for a GPU (WebGPU), 18 MB,
+                                                                       for browsers that can suspend WebAssembly (JSPI)
+  avatar/voice/ort-gpu.js, ort-gpu-wasm.js, ort-gpu.wasm               the GPU build for other browsers, 29 MB
   avatar/voice/v_<name>.bin    the voices (510 x 256 numbers each: the speaker, for every length of sentence)
   avatar/voice/vocab.json      which number the model uses for which sound
   avatar/voice/manifest.json   how many parts, how many bytes, which voices
@@ -51,6 +53,9 @@ out = {
     "ort.js": member("onnxruntime-web-1.31.1.tgz", "dist/ort.wasm.min.mjs"),
     "ort-wasm.js": member("onnxruntime-web-1.31.1.tgz", "dist/ort-wasm-simd-threaded.mjs"),
     "ort-wasm.wasm": member("onnxruntime-web-1.31.1.tgz", "dist/ort-wasm-simd-threaded.wasm"),
+    "ort-jspi.js": member("onnxruntime-web-1.31.1.tgz", "dist/ort.jspi.min.mjs"),
+    "ort-jspi-wasm.js": member("onnxruntime-web-1.31.1.tgz", "dist/ort-wasm-simd-threaded.jspi.mjs"),
+    "ort-jspi.wasm": member("onnxruntime-web-1.31.1.tgz", "dist/ort-wasm-simd-threaded.jspi.wasm"),
     "ort-gpu.js": member("onnxruntime-web-1.31.1.tgz", "dist/ort.webgpu.min.mjs"),
     "ort-gpu-wasm.js": member("onnxruntime-web-1.31.1.tgz", "dist/ort-wasm-simd-threaded.asyncify.mjs"),
     "ort-gpu.wasm": member("onnxruntime-web-1.31.1.tgz", "dist/ort-wasm-simd-threaded.asyncify.wasm"),

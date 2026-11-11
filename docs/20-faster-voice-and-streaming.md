@@ -38,6 +38,13 @@ finite or with a missing duration, the worker falls back to the processor with t
 The viewer switches by adding the other model file. The voice starts again with it, and only that model is kept.
 The page offers the full-precision file where a GPU is on offer, and the 8-bit one back where the GPU could not run it.
 
+**The GPU runtime, in the real viewer.** The first attempt there ended with "its runtime file could not be fetched".
+The WebGPU build of the runtime is a 29 MB file, and the viewer's frame fetches the 15 MB processor runtime from the
+same CDN without trouble; a size limit on what a page may fetch is the likely reason, though it was not confirmed.
+The runtime also comes in a smaller GPU build (18 MB) for browsers that can suspend WebAssembly (JSPI). The worker
+now tries that one first, then the larger. If the view refuses both, the page says so and offers the file as a
+download to add by hand, after which the voice starts again.
+
 **A storage limit found on the way.** Chrome will not keep a single value of 326 MB in IndexedDB; the 92 MB model
 had fitted. Added files are now stored as blobs, which the browser keeps as files. The earlier code also deleted the
 old model before the new one was safely stored; it now stores first.
@@ -54,9 +61,11 @@ writing. A borrowed voice (Claude's, the browser's) still needs the whole reply 
 
 ## Checked, and not
 
-- **The GPU path was not run.** The build machine has no GPU and its headless browser offers no WebGPU, with any
+- **The GPU itself was not run.** The build machine has no GPU and its headless browser offers no WebGPU, with any
   flag tried. What was run: the switch to the full-precision model, its fall-back to the processor (voice ready,
-  reply spoken), one model kept after the switch, and that the CDN serves the GPU runtime's 29 MB file.
+  reply spoken), one model kept after the switch, and that the CDN serves both GPU runtime files. And, with a worker
+  told that a GPU is on offer when none is: a view that refuses the GPU runtime (the page offers the file), then the
+  file added by hand (the GPU runtime loads, the GPU start is attempted and fails, the processor takes over).
 - Streaming was run with a stand-in that delivers the reply in eight parts; all four page tests pass with it.
   How much sooner the first sound comes with the real Claude was not measured.
 - Speed on a GPU is unknown until the readout from one is seen.
@@ -64,5 +73,5 @@ writing. A borrowed voice (Claude's, the browser's) still needs the whole reply 
 ## Files
 
 `avatar/voice/worker.js` (engine choice, GPU start and fall-back), `avatar/page.html` (readout, streaming, model
-switch, blob storage), `avatar/get_voice.py` (`full`, GPU runtime), `avatar/test_published.js` (step 5: the
-full-precision model added in place of the 8-bit one), `avatar/voice_test.js` (`VOICE_DIR` to try another layout).
+switch, blob storage), `avatar/get_voice.py` (`full`, GPU runtime), `avatar/test_published.js` (steps 5 and 6: the
+full-precision model added in place of the 8-bit one; a pretended GPU whose runtime the view refuses), `avatar/voice_test.js` (`VOICE_DIR` to try another layout).

@@ -238,7 +238,7 @@ const store = {
 // a file the viewer chose, by what its name ends in: the model, the runtime's WebAssembly, or a voice
 function take(name, buf) {
   const f = kk.files; name = name.replace(/^.*[\\/]/, '');
-  if (/\.onnx$/i.test(name)) f.model = buf; else if (/\.wasm$/i.test(name)) f.wasm = buf; else if (/\.bin$/i.test(name) && buf.byteLength % 1024 === 0 && buf.byteLength < 4e6) f.voices[name.replace(/( \(\d+\))?\.bin$/i, '')] = buf; else return false;
+  if (/\.onnx$/i.test(name)) f.model = buf; else if (/\.wasm$/i.test(name) && /jspi|asyncify/i.test(name)) f.gpuWasm = { kind: /jspi/i.test(name) ? 'jspi' : 'asyncify', buf }; else if (/\.wasm$/i.test(name)) f.wasm = buf; else if (/\.bin$/i.test(name) && buf.byteLength % 1024 === 0 && buf.byteLength < 4e6) f.voices[name.replace(/( \(\d+\))?\.bin$/i, '')] = buf; else return false;
   return true;
 }
 function ownVoice() {
@@ -249,8 +249,9 @@ function ownVoice() {
   // used. On a GPU one worker is enough: the GPU is where the work is done.
   const mobile = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const want = () => kk.about && kk.about.engine === 'gpu' ? 1 : clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, mobile ? 2 : 3, navigator.deviceMemory ? Math.floor(navigator.deviceMemory / 2) : 3), 1, 3);
-  const init = (w, model) => { const f = kk.files, m = { type: 'init', base, voice: FACE.voice, voices: {} }, tr = [];
-    if (model) { m.model = model; tr.push(model.buffer); } if (f.wasm) m.wasm = f.wasm.slice(0);
+  const published = /(^|\.)claudeusercontent\.com$/.test(location.hostname);                    // a published page carries no voice folder
+  const init = (w, model) => { const f = kk.files, m = { type: 'init', base, voice: FACE.voice, voices: {}, folder: !published }, tr = [];
+    if (model) { m.model = model; tr.push(model.buffer); } if (f.wasm) m.wasm = f.wasm.slice(0); if (f.gpuWasm) m.gpuWasm = { kind: f.gpuWasm.kind, data: f.gpuWasm.buf.slice(0) };
     for (const [k, v] of Object.entries(f.voices)) m.voices[k] = new Float32Array(v.slice(0));
     w.postMessage(m, tr); };
   const mine = () => { const b = kk.files.model; kk.files.model = null; return b ? new Uint8Array(b) : null; };      // the viewer's model file goes to the first worker, which passes it on
@@ -271,13 +272,16 @@ function ownVoice() {
   const viaBlob = () => { kk.blob = 'pending'; fetch(base + 'worker.js').then(r => { if (!r.ok) throw new Error('worker.js: HTTP ' + r.status); return r.text(); })
     .then(src => { kk.blob = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); wire(new Worker(kk.blob, { type: 'module' }), true, mine()); }).catch(e => lost(String(e && e.message || e))); };
   // Starting over (a different model was added): the old workers go, and whatever they were making is abandoned.
-  const boot = () => { for (const p of kk.pool) try { p.w.terminate(); } catch (e) {} try { if (kk.first) kk.first.terminate(); } catch (e) {}
-    kk.gen++; kk.pool = []; kk.wait = {}; kk.first = null; kk.alive = false; kk.about = null; kk.last = null; kk.voices = []; kk.state = 'loading'; kk.step = 'starting'; voiceList(); note();
+  // The model was handed to the workers, so unless a new one was just added it is read back from the browser's store.
+  const boot = async () => { for (const p of kk.pool) try { p.w.terminate(); } catch (e) {} try { if (kk.first) kk.first.terminate(); } catch (e) {}
+    const gen = ++kk.gen; kk.pool = []; kk.wait = {}; kk.first = null; kk.alive = false; kk.about = null; kk.last = null; kk.voices = []; kk.state = 'loading'; kk.step = 'starting'; voiceList(); note();
+    if (!kk.files.model) try { const f = await store.all(); for (const [k, v] of Object.entries(f)) if (/\.onnx$/i.test(k)) take(k, v); } catch (e) {}
+    if (gen !== kk.gen) return;
     try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } };
   // Files the viewer adds are kept for next time. A model starts the voice (again); a voice is passed round the workers.
   kk.add = async list => {
     let model = false, any = false;
-    for (const file of list) { const name = file.name.replace(/^.*[\\/]/, ''), buf = await file.arrayBuffer(); if (!take(name, buf)) continue; any = true; const isModel = /\.onnx$/i.test(name); model = model || isModel;
+    for (const file of list) { const name = file.name.replace(/^.*[\\/]/, ''), buf = await file.arrayBuffer(); if (!take(name, buf)) continue; any = true; const isModel = /\.onnx$/i.test(name); model = model || isModel || /\.wasm$/i.test(name);      // a runtime file also means starting again
       try { await store.put(name, buf); if (isModel) await store.drop(name); kk.kept = true; } catch (e) { kk.kept = false; kk.keptWhy = String(e && e.message || e).slice(0, 100); } }
     if (!any) return;
     if (kk.state === 'needs' && kk.first) { kk.state = 'loading'; kk.step = 'starting'; note(); init(kk.first, mine()); }
@@ -421,7 +425,8 @@ function note() {
     if (need.includes('wasm')) parts.push(link('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm', 'The speech runtime (15 MB)'), '. ');
   } else if (ready && kk.from === 'cdn') {
     if (a.engine !== 'gpu' && a.gpu === 'yes' && !a.full) parts.push('To make the voice much faster: this browser offers the page a GPU. Add ', link(HF + 'onnx/model.onnx', 'the full-precision model (326 MB)'), ' here and the voice runs on it in place of the processor. ');
-    if (a.engine !== 'gpu' && a.full) parts.push(a.gpuWhy ? `The GPU was tried and could not run the model (${a.gpuWhy}), so the processor does. ` : 'This browser offers the page no GPU, so the full-precision model runs on the processor, which is slower than the 8-bit one. ', link(HF + 'onnx/model_quantized.onnx', 'The 8-bit model (92 MB)'), ' is the one for the processor. ');
+    if (a.engine !== 'gpu' && a.full && a.gpuNeed) parts.push('The GPU could not be used because this view would not fetch its runtime file. Download ', link('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.' + a.gpuNeed + '.wasm', 'the GPU runtime (' + (a.gpuNeed === 'jspi' ? 18 : 29) + ' MB)'), ' and add it here, and the voice starts again on the GPU. Until then the processor runs this model, slower than the 8-bit one. ');
+    else if (a.engine !== 'gpu' && a.full) parts.push(a.gpuWhy ? `The GPU was tried and could not run the model (${a.gpuWhy}), so the processor does. ` : 'This browser offers the page no GPU, so the full-precision model runs on the processor, which is slower than the 8-bit one. ', link(HF + 'onnx/model_quantized.onnx', 'The 8-bit model (92 MB)'), ' is the one for the processor. ');
     const more = names.filter(n => !kk.voices.includes(n)); if (more.length) { parts.push('More voices (0.5 MB each, kept in this browser): '); more.forEach(n => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), ' ')); }
   }
   box.hidden = !parts.length; if (box.hidden) return;
@@ -432,7 +437,7 @@ function tech() {
   const a = kk.about, el = $('tech'); el.hidden = !(kk.state === 'ready' && a); if (el.hidden) return;
   const s = v => v.toFixed(2) + ' s', l = kk.last, ua = navigator.userAgent, engine = /Electron/.test(ua) ? 'Electron (Chromium)' : /Edg\//.test(ua) ? 'Edge (Chromium)' : /Chrome\//.test(ua) ? 'Chrome (Chromium)' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari (WebKit)' : 'unknown';
   $('techText').textContent = [
-    `Model: Kokoro 82M, ${a.full ? 'full precision' : '8-bit'}, ${Math.round(a.bytes / 1e6)} MB, run ${a.engine === 'gpu' ? 'on the GPU (WebGPU)' : 'as WebAssembly on the processor'}; libraries from the ${kk.from === 'cdn' ? 'CDN' : 'page'}`,
+    `Model: Kokoro 82M, ${a.full ? 'full precision' : '8-bit'}, ${Math.round(a.bytes / 1e6)} MB, run ${a.engine === 'gpu' ? 'on the GPU (WebGPU, ' + a.gpuKind + ' build)' : 'as WebAssembly on the processor'}; libraries from the ${kk.from === 'cdn' ? 'CDN' : 'page'}`,
     `Workers: ${kk.pool.length}, one line each at a time; ${kk.threads} thread${kk.threads > 1 ? 's' : ''} per worker (${a.isolated ? 'isolated page' : 'not an isolated page, so one'})`,
     `Cores this browser reports: ${a.cores || 'not said'}; GPU offered to the page (WebGPU): ${a.gpu}${a.gpuWhy ? '; tried and given up: ' + a.gpuWhy : ''}`,
     `This worker's core: a fixed sum of thirty million square roots took ${Math.round(a.loop)} ms (58 ms on the machine the page was built on, where a line takes about 1.3 times its length to make)`,
