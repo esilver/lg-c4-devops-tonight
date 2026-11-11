@@ -101,7 +101,8 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
   }
   { // the copied voice: a voice file is added on the page (the model's files are in the folder beside it), then a reply is spoken with it
     const p = await b.newPage({ viewport: { width: 900, height: 1200 } }); const errs = []; p.on('pageerror', e => errs.push(e.message));
-    await p.addInitScript(`(${mocks})(${JSON.stringify(['Maybe my mouth moves better now. Both of us will be able to tell.'])}, false)`); await p.goto(origin + '/index.html');
+    const LONG = 'Well, to be honest, I think the lips are timed by a small recogniser that listens to every line. It seems to work.';
+    await p.addInitScript(`(${mocks})(${JSON.stringify(['Maybe my mouth moves better now. Both of us will be able to tell.', LONG, LONG])}, false)`); await p.goto(origin + '/index.html');
     await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0 && live.state === 'idle' && kk.state === 'ready', null, { timeout: 240000 });
     const voice = path.join(__dirname, 'voice', 'src', 'pocket', 'demo.pvoice');
     if (!fs.existsSync(voice)) console.log('skip copied voice: no test voice file (gen/pocket.py voice makes one)');
@@ -114,6 +115,14 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
       const ok = st.state === 'ready' && st.picked === 'p:demo' && modes.has('own') && modes.size === 1 && open > 5 && shut > 0 && !errs.length; if (!ok) failed++;
       console.log(`${ok ? 'ok  ' : 'FAIL'} copied voice: ${st.state}${st.error ? ' (' + st.error + ')' : ''}${st.need && st.need.length ? ' needs ' + st.need : ''}, chosen ${st.picked}, a line in ${st.rtf.toFixed(2)} x its length | reply spoken with: ${[...modes].join(', ') || 'nothing'}; mouth open in ${open} and pressed shut in ${shut} of ${n} samples | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
       console.log(`     "${tech}"`);
+      // the opening: a reply whose first sentence is long is started on its first few words, cut at the comma
+      const ask = async q => { await p.fill('#say', q); const sent = Date.now(); await p.click('#send'); let heard = null;
+        for (let i = 0; i < 2400; i++) { const r = await p.evaluate(() => { const L = live.turn, l = L && live.cur >= 0 ? L[live.cur] : null; if (L) window.__L = L.map(x => x.text); return { s: live.state, at: l && l.when != null ? actx.currentTime - lag() - l.when : null }; });
+          if (r.s === 'speaking' && heard == null && r.at != null && r.at >= 0) heard = (Date.now() - sent) / 1000; if (i > 60 && r.s === 'idle') break; await p.waitForTimeout(25); }
+        return { heard, lines: await p.evaluate(() => window.__L) }; };
+      const cut = await ask('How do the lips work?'); await p.evaluate(() => { opening = () => 0; }); const whole = await ask('How do the lips work?');
+      const ok2 = cut.lines[0] === 'Well, to be honest,' && cut.lines.join(' ') === LONG && whole.lines.join(' ') === LONG && cut.heard != null && whole.heard != null && !errs.length; if (!ok2) failed++;
+      console.log(`${ok2 ? 'ok  ' : 'FAIL'} opening: lines ${JSON.stringify(cut.lines)} | first sound ${cut.heard == null ? 'never' : cut.heard.toFixed(1) + ' s'} after Send; with the first sentence said whole (${JSON.stringify(whole.lines[0].slice(0, 40))}…) ${whole.heard == null ? 'never' : whole.heard.toFixed(1) + ' s'} | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
     }
     await p.close();
   }

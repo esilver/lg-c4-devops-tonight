@@ -30,7 +30,7 @@ a normal speaking level and the model copies the level too, so it is raised firs
 | The page's worker, 6 lines (words by Whisper) | 0 real errors in 81 words (2 are the recogniser's spelling) |
 | The page's worker, times against the large aligner (244 sounds) | -6 ms median; half within 20 ms, 90% within 46 ms |
 | Speed natively, 4 threads | a line in 0.45 to 0.57 times its length |
-| Speed in headless Chromium, one thread | 1.6 times its length: the voice 1.1, the audio decoder 0.3, timing 0.1 |
+| Speed in headless Chromium, one thread | 1.6 times its length: the voice 1.1, the audio decoder 0.3, timing 0.1 (since brought to about 1.2: see [22](22-a-faster-copied-voice.md)) |
 | A tongue-twister | came out garbled once natively: the model samples, and there is no time for second takes |
 
 ## In the page

@@ -249,3 +249,16 @@ Described in [20](20-faster-voice-and-streaming.md). The voice ran in the real v
 fast laptop. A readout added to the page showed the 8-bit model, not the processor, to be the limit there, and that
 the browser offered a GPU. The page can now run the full-precision model on a GPU, untested here, and starts
 speaking the first sentence while the reply is still being written.
+
+## 17. A voice copied from a recording (11 November)
+
+Described in [21](21-a-copied-voice.md). The avatar speaks in a voice copied from a 14 second recording, made in the
+page by a small speech model. That model does not say when each sound happens, so a small recogniser listens to every
+line and times the sounds for the lips.
+
+## 18. A faster copied voice (11 November)
+
+Described in [22](22-a-faster-copied-voice.md). Asked why the copied voice felt slower than the other. The model was
+copying a 49 MB cache several times at every step; with the cache sized to the line the same speech is made in about
+a third less time on one thread. A reply's opening is now cut short and spoken first. On a copy of the page hosted on
+its own, the first sound came 4.5 s after a question in place of 16 s.

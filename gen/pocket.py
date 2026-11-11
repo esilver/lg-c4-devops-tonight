@@ -11,15 +11,54 @@ them is written here, including the tokenizer, so it can be carried over to the 
                   gives a conditioning vector and an end-of-speech score, one step of a flow network turns noise into
                   the next audio latent, and the latent is fed back
   audio           the latents go through the audio decoder (24 kHz)
+  memory          the language model keeps what it has heard and said in a cache per layer. The file gives the caches
+                  room for 1000 positions (49 MB in all) and every step copies all of it several times, which costs
+                  as much as the arithmetic. The size is only written in the file's notes on shapes, so those are
+                  changed to "any size" as the file is read (free_cache) and each line gets caches as long as it can
+                  need. The numbers that come out are the same; a step takes half the time
 
 Nothing here says when each sound happens: the model has no notion of it. Timing is measured afterwards (align.py).
 
   ./venv6/bin/python pocket.py <voice.wav> <out.wav> "Text to say." ["More text." ...]
   ./venv6/bin/python pocket.py voice <recording.wav> <out.pvoice>       the voice file the page uses (the recording after the audio encoder)
-Model files are looked for in ../avatar/voice/src/pocket/ (see docs/21)."""
+Model files are looked for in ../avatar/voice/src/pocket/ (see docs/21), then beside this script, then in
+../public/voice/pocket/."""
 import json, os, struct, sys, time
 import numpy as np, onnxruntime as ort, soundfile as sf
-D = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "avatar", "voice", "src", "pocket")
+HERE = os.path.dirname(os.path.abspath(__file__))
+def where(name):
+    for d in (os.path.join(HERE, "..", "avatar", "voice", "src", "pocket"), HERE, os.path.join(HERE, "..", "public", "voice", "pocket")):
+        if os.path.exists(os.path.join(d, name)): return os.path.join(d, name)
+    raise FileNotFoundError(f"{name}: not in avatar/voice/src/pocket/, beside this script, or in public/voice/pocket/")
+
+def free_cache(b):
+    """the model file with each note `dim_value: 1000` (bytes 08 E8 07) on its inputs, outputs and the values between
+    rewritten as `dim_param: "c"` (12 01 63): a size left open. Three bytes for three, so nothing else moves."""
+    b = bytearray(b)
+    def varint(i):
+        v = 0; s = 0
+        while True:
+            c = b[i]; i += 1; v |= (c & 127) << s; s += 7
+            if c < 128: return v, i
+    def fields(a, z):
+        i = a
+        while i < z:
+            key, i = varint(i); no, wt = key >> 3, key & 7
+            if wt == 0: v, i = varint(i); yield no, wt, v, None
+            elif wt == 1: yield no, wt, i, i + 8; i += 8
+            elif wt == 5: yield no, wt, i, i + 4; i += 4
+            elif wt == 2: n, i = varint(i); yield no, wt, i, i + n; i += n
+            else: raise ValueError("not an ONNX file")
+    sub = lambda a, z, no: [(x, y) for n, w, x, y in fields(a, z) if n == no and w == 2]; n = 0
+    for a, z in sub(0, len(b), 7):                                    # the graph
+        for no, wt, a1, z1 in fields(a, z):
+            if wt != 2 or no not in (11, 12, 13): continue            # its inputs, outputs and notes on values
+            for a2, z2 in sub(a1, z1, 2):                             # type > tensor > shape > each dimension
+                for a3, z3 in sub(a2, z2, 1):
+                    for a4, z4 in sub(a3, z3, 2):
+                        for a5, z5 in sub(a4, z4, 1):
+                            if bytes(b[a5:z5]) == b"\x08\xe8\x07": b[a5:z5] = b"\x12\x01c"; n += 1
+    return bytes(b), n
 
 # ── the tokenizer: SentencePiece's model file, read by hand ──
 def _fields(b):
@@ -91,16 +130,26 @@ class Tokenizer:
 # ── the model ──
 class Pocket:
     def __init__(self, threads=4, temperature=0.7, seed=0):
-        self.meta = M = json.load(open(os.path.join(D, "bundle.json"))); self.tok = Tokenizer(os.path.join(D, M["tokenizer_file"]))
+        self.meta = M = json.load(open(where("bundle.json"))); self.tok = Tokenizer(where(M["tokenizer_file"]))
         so = ort.SessionOptions(); so.intra_op_num_threads = threads; so.inter_op_num_threads = 1
-        load = lambda f: ort.InferenceSession(os.path.join(D, f), so, providers=["CPUExecutionProvider"])
-        self.enc, self.txt, self.lm, self.flow, self.dec = load("mimi_encoder.onnx"), load("text_conditioner.onnx"), load("flow_lm_main_int8.onnx"), load("flow_lm_flow_int8.onnx"), load("mimi_decoder_int8.onnx")
+        load = lambda f: ort.InferenceSession(where(f), so, providers=["CPUExecutionProvider"])
+        self.enc, self.txt, self.flow, self.dec = load("mimi_encoder.onnx"), load("text_conditioner.onnx"), load("flow_lm_flow_int8.onnx"), load("mimi_decoder_int8.onnx")
+        lm, n = free_cache(open(where("flow_lm_main_int8.onnx"), "rb").read()); self.fits = n > 0      # caches made to measure, if this is the file that allows it
+        self.lm = ort.InferenceSession(lm, so, providers=["CPUExecutionProvider"])
         self.sr, self.ld, self.cd = M["sample_rate"], M["latent_dim"], M["conditioning_dim"]; self.frame = M["samples_per_frame"] / self.sr
-        self.bos = np.load(os.path.join(D, M["bos_before_voice_file"])).astype(np.float32) if M.get("insert_bos_before_voice") else None
+        self.bos = np.load(where(M["bos_before_voice_file"])).astype(np.float32) if M.get("insert_bos_before_voice") else None
         self.temp = temperature; self.rng = np.random.default_rng(seed)
-    def _blank(self, manifest):
-        T = dict(float32=np.float32, int64=np.int64, bool=np.bool_)
-        return {e["input_name"]: (np.full(e["shape"], np.nan, T[e["dtype"]]) if e["fill"] == "nan" else np.ones(e["shape"], T[e["dtype"]]) if e["fill"] == "ones" else np.zeros(e["shape"], T[e["dtype"]])) for e in manifest}
+    def _blank(self, manifest, cap=None):
+        T = dict(float32=np.float32, int64=np.int64, bool=np.bool_); shape = lambda e: [cap if cap and len(e["shape"]) == 5 and d == 1000 else d for d in e["shape"]]
+        return {e["input_name"]: (np.full(shape(e), np.nan, T[e["dtype"]]) if e["fill"] == "nan" else np.ones(shape(e), T[e["dtype"]]) if e["fill"] == "ones" else np.zeros(shape(e), T[e["dtype"]])) for e in manifest}
+    def _room(self, v, more):
+        """a copy of a voice's state with caches long enough for `more` positions after the voice"""
+        if not self.fits: return {k: a.copy() for k, a in v["state"].items()}
+        out = {}
+        for k, a in v["state"].items():
+            if a.ndim == 5: b = np.full((2, 1, v["used"] + more, 16, 64), np.nan, np.float32); b[:, :, :v["used"]] = a[:, :, :v["used"]]; out[k] = b
+            else: out[k] = a.copy()
+        return out
     def _keep(self, state, result, manifest, offset):
         for e in manifest: state[e["input_name"]] = result[offset + e["index"]]
     def voice(self, wav):
@@ -109,9 +158,9 @@ class Pocket:
         if a.ndim > 1: a = a.mean(axis=1)
         emb = self.enc.run(None, {"audio": a.reshape(1, 1, -1)})[0]; emb = emb.reshape(1, -1, emb.shape[-1]).astype(np.float32)
         if self.bos is not None: emb = np.concatenate([self.bos.reshape(1, -1, emb.shape[-1]), emb], axis=1)
-        state = self._blank(self.meta["flow_lm_state_manifest"])
+        state = self._blank(self.meta["flow_lm_state_manifest"], emb.shape[1] if self.fits else None)
         r = self.lm.run(None, {"sequence": np.zeros((1, 0, self.ld), np.float32), "text_embeddings": emb, **state}); self._keep(state, r, self.meta["flow_lm_state_manifest"], 2)
-        return state, emb
+        return dict(state=state, used=emb.shape[1]), emb
     @staticmethod
     def tidy(text):
         text = " ".join(text.split()); text = text[0].upper() + text[1:]
@@ -119,11 +168,11 @@ class Pocket:
     def say(self, text, voice, after=None):
         """one line -> (audio, seconds it took, number of frames)"""
         t0 = time.time(); text = self.tidy(text); ids = np.array([self.tok.encode(text)], np.int64); M = self.meta["flow_lm_state_manifest"]
-        state = {k: v.copy() for k, v in voice.items()}
+        limit = int(np.ceil((ids.shape[1] / 3.0 + 2.0) * self.meta["frame_rate"])); state = self._room(voice, ids.shape[1] + limit)      # the most steps this line may take
         r = self.lm.run(None, {"sequence": np.zeros((1, 0, self.ld), np.float32), "text_embeddings": self.txt.run(None, {"token_ids": ids})[0].reshape(1, -1, self.cd), **state}); self._keep(state, r, M, 2)
         after = after if after is not None else (3 if len(text.split()) <= 4 else 1) + 2      # frames made after the model says the speech is over
         cur = np.full((1, 1, self.ld), np.nan, np.float32); none = np.zeros((1, 0, self.cd), np.float32); lat = []; eos = None
-        for step in range(int(np.ceil((ids.shape[1] / 3.0 + 2.0) * self.meta["frame_rate"]))):
+        for step in range(limit):
             r = self.lm.run(None, {"sequence": cur, "text_embeddings": none, **state}); self._keep(state, r, M, 2)
             if r[1][0][0] > -4.0 and eos is None: eos = step
             if eos is not None and step >= eos + after: break

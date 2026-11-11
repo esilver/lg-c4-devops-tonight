@@ -5,25 +5,31 @@
 // speech recogniser and the times with the large aligner. Prints how long each line took and where the time went.
 // The voice defaults to a test voice made from a synthetic recording (avatar/voice/src/pocket/demo.pvoice).
 //   node avatar/pocket_test.js          (from the repository root; needs avatar/voice/ and avatar/voice/pocket/ filled)
+// To compare ways of running it:  POCKET_FIT=0 (caches at the published 1000 positions)  POCKET_ISOLATED=1 (the page is
+// served so that threads are allowed)  POCKET_THREADS=n  POCKET_FULL=1 (the full-precision files, from avatar/voice/src/pocket_full/)
+// POCKET_LINES='One line.|Another.' says those in place of the test sentences.
 const { chromium } = require('playwright'), http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = __dirname, OUT = process.argv[2] || path.join(__dirname, '..', 'tests', 'output', 'pocket'), VOICE = process.argv[3] || path.join(__dirname, 'voice', 'src', 'pocket', 'demo.pvoice');
 const TYPES = { '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.html': 'text/html' };
-const LINES = ["Hi, I'm the avatar. Ask me anything you like.", 'Good question. The lips you are watching are timed by a small recogniser that listens to my voice.',
+const LINES = process.env.POCKET_LINES ? process.env.POCKET_LINES.split('|') : ["Hi, I'm the avatar. Ask me anything you like.", 'Good question. The lips you are watching are timed by a small recogniser that listens to my voice.',
   'Sure, I can do that. Give me a moment to think about it.', 'The weather in Paris is usually mild in May, with a few rainy afternoons.',
   'Maybe my mouth moves better now, but both of us will be able to tell.', 'About forty-two percent of people say they would rather type than talk.'];
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const server = http.createServer((q, r) => {
     const u = decodeURIComponent(q.url.split('?')[0]);
-    if (u === '/bench.html') { r.writeHead(200, { 'content-type': 'text/html' }); return r.end('<!DOCTYPE html><title>bench</title>'); }
+    if (u === '/bench.html') { r.writeHead(200, Object.assign({ 'content-type': 'text/html' }, process.env.POCKET_ISOLATED ? { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless' } : {})); return r.end('<!DOCTYPE html><title>bench</title>'); }
     const f = path.join(ROOT, u); if (!f.startsWith(ROOT) || !fs.existsSync(f)) { r.writeHead(404); return r.end(); }
-    r.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(r);
+    const h = { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream', 'content-length': fs.statSync(f).size };
+    if (process.env.POCKET_ISOLATED) { h['Cross-Origin-Opener-Policy'] = 'same-origin'; h['Cross-Origin-Embedder-Policy'] = 'credentialless'; }
+    r.writeHead(200, h); fs.createReadStream(f).pipe(r);
   }).listen(0);
   const browser = await chromium.launch(), page = await browser.newPage();
   page.on('console', m => console.log('  page:', m.text())); page.on('pageerror', e => console.log('  page error:', e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/bench.html`);
   const t0 = Date.now(), voice = fs.readFileSync(VOICE).toString('base64');
-  const ready = await page.evaluate(voice => new Promise((done, fail) => {
+  const opt = { fit: process.env.POCKET_FIT !== '0', threads: +process.env.POCKET_THREADS || 0, full: !!process.env.POCKET_FULL };
+  const ready = await page.evaluate(({ voice, opt }) => new Promise((done, fail) => {
     const w = window.w = new Worker('voice/pocket.js', { type: 'module' }), steps = []; window.waiting = {};
     const bin = atob(voice), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
     w.onerror = e => fail(new Error('worker: ' + (e.message || 'failed to start')));
@@ -33,9 +39,12 @@ const LINES = ["Hi, I'm the avatar. Ask me anything you like.", 'Good question. 
       else if (m.type === 'need') fail(new Error('needs ' + m.what.join(', ')));
       else if (m.type === 'error' && m.id == null) fail(new Error(m.at + ': ' + m.message));
       else if (window.waiting[m.id]) { window.waiting[m.id](m); delete window.waiting[m.id]; } };
-    w.postMessage({ type: 'init', base: new URL('voice/', location.href).href, voice: 'test', voices: { test: new Float32Array(u8.buffer) } });
-  }), voice);
+    const full = new URL('voice/src/pocket_full/', location.href).href;
+    w.postMessage({ type: 'init', base: new URL('voice/', location.href).href, voice: 'test', voices: { test: new Float32Array(u8.buffer) }, fit: opt.fit, threads: opt.threads,
+      from: opt.full ? { lm: full + 'flow_lm_main.onnx', flow: full + 'flow_lm_flow.onnx', dec: full + 'mimi_decoder.onnx' } : null });
+  }), { voice, opt });
   const a = ready.about, p = a.parts;
+  console.log(`${a.full ? 'full precision' : '8-bit'}; caches ${a.fits ? 'made to measure' : 'at 1000 positions'}; ${a.isolated ? 'isolated page' : 'not isolated'}`);
   console.log(`ready in ${((Date.now() - t0) / 1000).toFixed(1)} s; steps: ${ready.steps.join(' > ')}; threads ${ready.threads}; voice primed in ${a.primed.toFixed(2)} s; first line ${a.cold.toFixed(2)} s; then ${a.secs.toFixed(2)} s of speech in ${a.made.toFixed(2)} s (${ready.rtf.toFixed(2)} x): text ${p.text.toFixed(2)}, voice ${p.voice.toFixed(2)}, audio ${p.audio.toFixed(2)}`);
   const rows = [];
   for (let i = 0; i < LINES.length; i++) {

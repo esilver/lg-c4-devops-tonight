@@ -14,6 +14,11 @@
                         of 127 IPA symbols is -> a Viterbi search lays the line's sounds over that -> each boundary is
                         moved to where the next sound becomes the likelier -> silences inside become pauses
 
+   The language model remembers what it has heard and said in a cache per layer. As published the cache has room for
+   1000 positions (49 MB in all) and every step copies all of it several times over, which costs more than the
+   arithmetic does. A line needs a few hundred positions, so here each line gets a cache of the size it can need
+   (freeCache, room): the same numbers come out, in about half the time.
+
    Both networks are ONNX files run by onnxruntime-web as WebAssembly. All the code that drives them is here. What a
    line ends as (sounds with times, words, pitch, levelled audio) is made by speech.js, as for the other voice.
    Messages in: init, say, cancel. Messages out: progress, need, ready, said, skipped, error. */
@@ -32,7 +37,7 @@ const CLS = { 'ɑ': 'ɑ a ɒ', 'æ': 'æ a ɛ', 'a': 'a æ ɑ', 'ʌ': 'ʌ ɐ ə'
 for (const c of 'bfhjmsvwzŋʃʒðθ') CLS[c] = c;
 const ZID = {}; ZTOK.forEach((t, i) => { ZID[t] = i; }); const CID = {}; for (const [k, v] of Object.entries(CLS)) CID[k] = v.split(' ').map(t => ZID[t]).filter(i => i != null);
 const LATE = 0.02;                                      // the aligner places sounds 20 ms late (measured twice against known timing: gen/align_small.py check)
-let ort, phonemize, S, sounds, base, least = 0, stage = 'start', queue = Promise.resolve(), tokenizer = null, NS = 18, lines = 0;
+let ort, phonemize, S, sounds, base, least = 0, stage = 'start', queue = Promise.resolve(), tokenizer = null, NS = 18, lines = 0, fits = false, full = false;      // fits: caches are made to measure; full: the full-precision files are in use
 const ses = {}, voices = {}, pitches = {};
 const post = (m, t) => self.postMessage(m, t || []);
 self.onmessage = e => {
@@ -42,20 +47,34 @@ self.onmessage = e => {
     .catch(err => post({ type: 'error', id: m.id, seq: m.seq, at: m.type === 'init' ? stage : 'say', message: String(err && err.message || err) }));
 };
 
-/* ── the tokenizer: SentencePiece's model file, read by hand (a small protobuf: pieces with a score and a kind) ── */
+/* ── protobuf, read by hand: the fields of a message that lies in b[from, to), as [number, wire type, value or start, end] ── */
+function* fields(b, from, to) {
+  let i = from; const varint = () => { let v = 0, s = 0; for (;;) { const c = b[i++]; v += (c & 127) * 2 ** s; s += 7; if (c < 128) return v; } };
+  while (i < to) { const key = varint(), no = Math.floor(key / 8), wt = key % 8;
+    if (wt === 0) yield [no, wt, varint()]; else if (wt === 1) { yield [no, wt, i]; i += 8; } else if (wt === 5) { yield [no, wt, i]; i += 4; }
+    else if (wt === 2) { const n = varint(); yield [no, wt, i, i + n]; i += n; } else throw new Error('not a file of the expected kind'); }
+}
+// The language model's file says its caches hold 1000 positions, but only in the notes on its inputs, outputs and the
+// values between: the arithmetic inside takes the size from the cache it is given. Each such note, `dim_value: 1000`
+// (bytes 08 E8 07), is rewritten in place as `dim_param: "c"` (12 01 63), a size left open. It is three bytes for
+// three, so nothing else in the file moves. Returns how many were changed (0: not that file, and the size stays 1000).
+function freeCache(b) {
+  let n = 0; const sub = (a, z, no) => { const out = []; for (const f of fields(b, a, z)) if (f[0] === no && f[1] === 2) out.push(f); return out; };
+  for (const [, , a, z] of sub(0, b.length, 7))                         // the graph
+    for (const f of fields(b, a, z)) if (f[1] === 2 && (f[0] === 11 || f[0] === 12 || f[0] === 13))      // its inputs, outputs and notes on values
+      for (const [, , a2, z2] of sub(f[2], f[3], 2)) for (const [, , a3, z3] of sub(a2, z2, 1)) for (const [, , a4, z4] of sub(a3, z3, 2))      // type > tensor > shape
+        for (const [, , a5, z5] of sub(a4, z4, 1)) if (z5 - a5 === 3 && b[a5] === 0x08 && b[a5 + 1] === 0xE8 && b[a5 + 2] === 0x07) { b[a5] = 0x12; b[a5 + 1] = 0x01; b[a5 + 2] = 0x63; n++; }
+  return n;
+}
+
+/* ── the tokenizer: SentencePiece's model file (a small protobuf: pieces with a score and a kind) ── */
 function readPieces(buf) {
   const b = new Uint8Array(buf), dv = new DataView(b.buffer, b.byteOffset, b.byteLength), dec = new TextDecoder();
-  const fields = function* (from, to) {
-    let i = from; const varint = () => { let v = 0, s = 0; for (;;) { const c = b[i++]; v += (c & 127) * 2 ** s; s += 7; if (c < 128) return v; } };
-    while (i < to) { const key = varint(), no = Math.floor(key / 8), wt = key % 8;
-      if (wt === 0) yield [no, wt, varint()]; else if (wt === 1) { yield [no, wt, i]; i += 8; } else if (wt === 5) { yield [no, wt, i]; i += 4; }
-      else if (wt === 2) { const n = varint(); yield [no, wt, i, i + n]; i += n; } else throw new Error('not a SentencePiece model'); }
-  };
   const pieces = []; let unk = 0, dummy = true, kind = 1;
-  for (const [no, wt, a, z] of fields(0, b.length)) {
-    if (no === 1) { let piece = '', score = 0, typ = 1; for (const [n2, w2, a2, z2] of fields(a, z)) { if (n2 === 1) piece = dec.decode(b.subarray(a2, z2)); else if (n2 === 2) score = dv.getFloat32(a2, true); else if (n2 === 3) typ = a2; } if (typ === 2) unk = pieces.length; pieces.push([piece, score, typ]); }
-    else if (no === 2) { for (const [n2, w2, a2] of fields(a, z)) if (n2 === 3) kind = a2; }
-    else if (no === 3) { for (const [n2, w2, a2] of fields(a, z)) if (n2 === 3) dummy = !!a2; }
+  for (const [no, wt, a, z] of fields(b, 0, b.length)) {
+    if (no === 1) { let piece = '', score = 0, typ = 1; for (const [n2, w2, a2, z2] of fields(b, a, z)) { if (n2 === 1) piece = dec.decode(b.subarray(a2, z2)); else if (n2 === 2) score = dv.getFloat32(a2, true); else if (n2 === 3) typ = a2; } if (typ === 2) unk = pieces.length; pieces.push([piece, score, typ]); }
+    else if (no === 2) { for (const [n2, w2, a2] of fields(b, a, z)) if (n2 === 3) kind = a2; }
+    else if (no === 3) { for (const [n2, w2, a2] of fields(b, a, z)) if (n2 === 3) dummy = !!a2; }
   }
   if (kind !== 1 || pieces.length < 100) throw new Error('that tokenizer file is not the one for this model');
   const id = new Map(); let longest = 1, floor = 0; pieces.forEach(([p, s, t], i) => { id.set(p, i); longest = Math.max(longest, p.length); if (t === 1) floor = Math.min(floor, s); });
@@ -76,6 +95,17 @@ function encode(tk, text) {
 }
 
 /* ── starting ── */
+// A file published somewhere else (the full-precision model): fetched once, told about as it arrives, and kept in the
+// browser's own cache for the next time and for the next worker.
+async function far(url, tell) {
+  let c = null; try { c = await caches.open('avatar-voice'); const hit = await c.match(url); if (hit) return hit.arrayBuffer(); } catch (e) {}
+  const r = await fetch(url); if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+  const total = +r.headers.get('content-length') || 0, rd = r.body.getReader(), parts = []; let n = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); n += value.length; tell(n, total); }
+  const buf = new Uint8Array(n); let at = 0; for (const p of parts) { buf.set(p, at); at += p.length; }
+  try { if (c) await c.put(url, new Response(buf, { headers: { 'content-type': 'application/octet-stream' } })); } catch (e) {}
+  return buf.buffer;
+}
 async function init(m) {
   base = m.base; const step = (s, x) => { stage = s; post(Object.assign({ type: 'progress', step: s }, x)); };
   const grab = async url => { const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); };
@@ -88,17 +118,18 @@ async function init(m) {
   step('pronouncer');
   try { ({ phonemize } = await import(man ? base + 'phonemizer.js' : PHON)); await phonemize('ready', 'en-us'); } catch (e) { throw new Error('the pronouncer could not be loaded (' + why(e) + ')'); }
   S = await import(base + 'speech.js'); sounds = S.soundsWith(phonemize);
-  const have = m.files || {}, need = wasm ? [] : ['wasm']; for (const k of Object.keys(FILES)) if (!have[k] && !man) need.push(k);
+  const have = m.files || {}, far0 = m.from || {}, need = wasm ? [] : ['wasm']; for (const k of Object.keys(FILES)) if (!have[k] && !far0[k] && !man) need.push(k);
   if (!Object.keys(m.voices || {}).length) need.push('voice');
   if (need.length) { stage = 'need'; return post({ type: 'need', what: need }); }
-  const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2))) : 1;      // two workers share the cores
+  const threads = !self.crossOriginIsolated ? 1 : m.threads || Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2)));      // two workers share the cores
   ort.env.wasm.wasmPaths = { mjs: man ? base + 'ort-wasm.js' : ORT + 'ort-wasm-simd-threaded.mjs' }; ort.env.wasm.wasmBinary = wasm; ort.env.wasm.numThreads = threads;
   let got = 0; const total = Object.keys(FILES).length;
   for (const k of Object.keys(FILES)) {
     step('model', { got: got++, of: total });
-    const bytes = new Uint8Array(have[k] || await grab(base + 'pocket/' + FILES[k]));
+    let bytes; try { bytes = new Uint8Array(have[k] || (far0[k] ? await far(far0[k], (n, of) => post({ type: 'progress', step: 'model', got: got - 1, of: total, mb: n / 1e6, ofmb: of / 1e6 })) : await grab(base + 'pocket/' + FILES[k]))); }
+    catch (e) { throw new Error('the file for "' + k + '" could not be fetched (' + why(e) + ')'); }
     if (k === 'tok') tokenizer = readPieces(bytes);
-    else try { ses[k] = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); } catch (e) { throw new Error('the file for "' + k + '" could not be started (' + why(e) + ')'); }
+    else try { if (k === 'lm') { fits = m.fit !== false && freeCache(bytes) > 0; full = bytes.length > 2e8; } ses[k] = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); } catch (e) { throw new Error('the file for "' + k + '" could not be started (' + why(e) + ')'); }
   }
   NS = ses.lm.inputNames.filter(n => n.startsWith('state_')).length;
   step('starting'); const names = Object.keys(m.voices), t0 = performance.now();
@@ -108,25 +139,37 @@ async function init(m) {
   const t = performance.now(), r = await speak('And this is another one, to see how fast it goes.', v0), made = (performance.now() - t) / 1000;
   const tl = performance.now(); let acc = 0; for (let i = 0; i < 3e7; i++) acc += Math.sqrt(i) * 1.0000001; const loop = performance.now() - tl + (acc < 0 ? 1 : 0);
   stage = 'ready'; post({ type: 'ready', rtf: made / (r.wave.length / SR), threads, voices: names, from: man ? 'page' : 'cdn',
-    about: { cold, made, secs: r.wave.length / SR, primed, parts: r.parts, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, loop } });
+    about: { fits, full, cold, made, secs: r.wave.length / SR, primed, parts: r.parts, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, loop } });
 }
 
 /* ── the model ── */
 const T = (type, data, dims) => new ort.Tensor(type, data, dims);
-const blank = () => { const s = {}; for (let i = 0; i < NS; i += 3) { s['state_' + i] = T('float32', new Float32Array(2 * 1000 * 16 * 64).fill(NaN), [2, 1, 1000, 16, 64]); s['state_' + (i + 1)] = T('float32', new Float32Array(0), [0]); s['state_' + (i + 2)] = T('int64', new BigInt64Array(1), [1]); } return s; };
+const ROW = 16 * 64;                                    // one position in a cache: 16 heads of 64 numbers, kept twice (keys, then values)
+const blank = cap => { const s = {}; for (let i = 0; i < NS; i += 3) { s['state_' + i] = T('float32', new Float32Array(2 * cap * ROW).fill(NaN), [2, 1, cap, 16, 64]); s['state_' + (i + 1)] = T('float32', new Float32Array(0), [0]); s['state_' + (i + 2)] = T('int64', new BigInt64Array(1), [1]); } return s; };
 const keep = (out, n) => { const s = {}; for (let i = 0; i < n; i++) s['state_' + i] = out['out_state_' + i]; return s; };
 // The voice: the language model's state after it has been fed the recording (as the audio encoder wrote it down).
-async function prime(emb) { const n = emb.length / CD; return keep(await ses.lm.run(Object.assign({ sequence: T('float32', new Float32Array(0), [1, 0, LD]), text_embeddings: T('float32', emb, [1, n, CD]) }, blank())), NS); }
+// Its caches are exactly as long as the recording; room() makes the copy a line works in, with space for what follows,
+// and makes it longer again whenever the line has filled it (MORE positions at a time).
+const MORE = 32;
+async function prime(emb) { const n = emb.length / CD, cap = fits ? n : 1000; return { used: n, cap, state: keep(await ses.lm.run(Object.assign({ sequence: T('float32', new Float32Array(0), [1, 0, LD]), text_embeddings: T('float32', emb, [1, n, CD]) }, blank(cap))), NS) }; }
+function room(st, used, from, to) {                     // the same state with caches of `to` positions in place of `from`; `used` of them are filled
+  if (!fits) return st; const s = Object.assign({}, st);
+  for (let i = 0; i < NS; i += 3) { const a = st['state_' + i].data, b = new Float32Array(2 * to * ROW).fill(NaN);
+    b.set(a.subarray(0, used * ROW), 0); b.set(a.subarray(from * ROW, (from + used) * ROW), to * ROW); s['state_' + i] = T('float32', b, [2, 1, to, 16, 64]); }
+  return s;
+}
 const tidy = text => { text = text.trim().replace(/\s+/g, ' '); text = text[0].toUpperCase() + text.slice(1); return /[\p{L}\p{N}]$/u.test(text) ? text + '.' : text; };
 // One line -> its waveform. Chance comes from a counter, so the same line in the same place comes out the same.
 async function speak(text, name) {
   const t0 = performance.now(), ids = encode(tokenizer, tidy(text)), seed = { a: (0x9e3779b9 * (++lines + 1)) >>> 0 };
   const rnd = () => { let t = seed.a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const te = (await ses.txt.run({ token_ids: T('int64', BigInt64Array.from(ids, BigInt), [1, ids.length]) })).embeddings;
-  let out = await ses.lm.run(Object.assign({ sequence: T('float32', new Float32Array(0), [1, 0, LD]), text_embeddings: T('float32', te.data, [1, ids.length, CD]) }, voices[name])), state = keep(out, NS);
+  const limit = Math.ceil((ids.length / 3 + 2) * FPS), v = voices[name], said = v.used + ids.length; let cap = said + MORE;      // the most steps this line may take; what the caches hold once the words are in
+  let out = await ses.lm.run(Object.assign({ sequence: T('float32', new Float32Array(0), [1, 0, LD]), text_embeddings: T('float32', te.data, [1, ids.length, CD]) }, room(v.state, v.used, v.cap, cap))), state = keep(out, NS);
   const after = (text.trim().split(/\s+/).length <= 4 ? 3 : 1) + 2, none = T('float32', new Float32Array(0), [1, 0, CD]), s0 = T('float32', Float32Array.of(0), [1, 1]), s1 = T('float32', Float32Array.of(1), [1, 1]);
   let cur = T('float32', new Float32Array(LD).fill(NaN), [1, 1, LD]), eos = -1; const lat = [], sd = Math.sqrt(TEMP), t1 = performance.now();
-  for (let k = 0, limit = Math.ceil((ids.length / 3 + 2) * FPS); k < limit; k++) {
+  for (let k = 0; k < limit; k++) {
+    if (fits && said + k >= cap) { state = room(state, said + k, cap, cap + MORE); cap += MORE; }
     out = await ses.lm.run(Object.assign({ sequence: cur, text_embeddings: none }, state)); state = keep(out, NS);
     if (out.eos_logit.data[0] > -4 && eos < 0) eos = k;                   // the model says the speech is over; a few more frames let it die away
     if (eos >= 0 && k >= eos + after) break;

@@ -33,4 +33,4 @@ demo/avatar-*
 tests/output/voice/
 avatar/voice_full/
 avatar/faces/*.pvoice
-tests/output/pocket/
+tests/output/pocket*/

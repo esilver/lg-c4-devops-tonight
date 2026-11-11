@@ -50,6 +50,9 @@
   #tech { color: var(--muted); font-size: 13px; }
   #tech summary { cursor: pointer; }
   #tech pre { margin: 6px 0 0; font: 12.5px/1.5 var(--data); white-space: pre-wrap; overflow-wrap: anywhere; }
+  #fullRow { margin-top: 8px; }
+  #fullRow[hidden] { display: none; }
+  #full { font: inherit; padding: 4px 10px; }
   #add { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
   #add[hidden] { display: none; }
   .pick { display: inline-flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 14px; color: var(--muted); }
@@ -77,7 +80,7 @@
     <label for="voice" id="voiceRow" hidden>Voice <select id="voice"></select></label>
     <span id="how"></span>
   </div>
-  <details id="tech" hidden><summary>Voice details</summary><pre id="techText"></pre></details>
+  <details id="tech" hidden><summary>Voice details</summary><pre id="techText"></pre><p class="note" id="fullRow" hidden><button id="full" type="button"></button> <span id="fullWhy"></span></p></details>
   <div id="add" hidden>
     <p class="note" id="addWhy"></p>
     <label class="pick">Add the files <input id="files" type="file" multiple accept=".onnx,.bin,.wasm,.model,.pvoice"></label>
@@ -943,17 +946,23 @@ const store = {
   all: async () => { const db = await store.open(), out = await new Promise((ok, no) => { const o = {}, c = db.transaction('f').objectStore('f').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { o[cur.key] = cur.value; cur.continue(); } else ok(o); }; c.onerror = () => no(c.error); });
     for (const k of Object.keys(out)) if (out[k] instanceof Blob) out[k] = await out[k].arrayBuffer(); return out; },
   put: async (k, v) => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'); t.objectStore('f').put(new Blob([v]), k); t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error || new Error('not stored')); }); },
+  swap: async name => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'), o = t.objectStore('f'), r = o.getAllKeys(); r.onsuccess = () => { for (const k of r.result) if (k !== name && pfile(k) === pfile(name)) o.delete(k); }; t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
   // one model at a time is kept: a new one replaces the old
   drop: async keep => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'), o = t.objectStore('f'), r = o.getAllKeys(); r.onsuccess = () => { for (const k of r.result) if (/\.onnx$/i.test(k) && !pfile(k) && k !== keep) o.delete(k); }; t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
 };
 // A voice copied from a recording (Pocket TTS, voice/pocket.js). It needs its own model, in four files and a tokenizer,
 // and a small recogniser that times the sounds, since this model does not say when they happen. `pv` holds the voices:
 // each is the recording as the model's audio encoder wrote it down (made beforehand; built into this page or added).
-const pk = { state: 'off', gen: 0, pool: [], rtf: 1.6, cps: 15, step: '', got: 0, of: 0, error: '', wait: {}, id: 0, voices: [], threads: 1, need: [], files: {}, pv: {}, about: null, last: null, from: '' };
+const pk = { state: 'off', gen: 0, pool: [], rtf: 1.2, cps: 15, step: '', got: 0, of: 0, error: '', wait: {}, id: 0, voices: [], threads: 1, need: [], files: {}, pv: {}, about: null, last: null, from: '' };
 const HFP = 'https://huggingface.co/KevinAHM/pocket-tts-onnx/resolve/58a6d00cf13d239b6748cb0769f35c580a8f606c/onnx/english_2026-04/', HFZ = 'https://huggingface.co/anyspeech/zipa-small-crctc-500k/resolve/dfe87c97662606fa6db90ad06f627d4363314744/';
 const PNEED = { lm: [HFP + 'flow_lm_main_int8.onnx', 'the language model (76 MB)'], flow: [HFP + 'flow_lm_flow_int8.onnx', 'the flow network (10 MB)'], dec: [HFP + 'mimi_decoder_int8.onnx', 'the audio decoder (23 MB)'],
   txt: [HFP + 'text_conditioner.onnx', 'the text conditioner (16 MB)'], tok: [HFP + 'tokenizer.model', 'the tokenizer'], zipa: [HFZ + 'model.int8.onnx', 'the recogniser that times the sounds (71 MB)'] };
+// The same model at full precision: three larger files. Which is faster depends on the processor, so the page can be
+// switched between the two and the readout says what each does here.
+const PFULL = { lm: [HFP + 'flow_lm_main.onnx', 'the language model (303 MB)'], flow: [HFP + 'flow_lm_flow.onnx', 'the flow network (39 MB)'], dec: [HFP + 'mimi_decoder.onnx', 'the audio decoder (41 MB)'] };
+const fullWanted = () => { try { return localStorage.getItem('avatar-full') === '1'; } catch (e) { return false; } };
 const pfile = n => /^flow_lm_main/i.test(n) ? 'lm' : /^flow_lm_flow/i.test(n) ? 'flow' : /^mimi_decoder/i.test(n) ? 'dec' : /^text_conditioner/i.test(n) ? 'txt' : /^tokenizer.*\.model$/i.test(n) ? 'tok' : /^(model\.int8|zipa)[^\\/]*\.onnx$/i.test(n) ? 'zipa' : '';
+const published = () => /(^|\.)claudeusercontent\.com$/.test(location.hostname);                    // a page published as a Claude artifact carries no voice folder
 const eng = () => (($('voice').value || '').startsWith('p:') ? pk : kk);      // the engine of the voice that is chosen
 // A file the viewer chose, by its name: part of the copied voice, a copied voice itself, the other voice's model, the
 // runtime's WebAssembly, or one of the other voice's voices. Says which it was ('' if none).
@@ -974,8 +983,7 @@ function ownVoice() {
   // used. On a GPU one worker is enough: the GPU is where the work is done.
   const mobile = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const want = () => kk.about && kk.about.engine === 'gpu' ? 1 : clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, mobile ? 2 : 3, navigator.deviceMemory ? Math.floor(navigator.deviceMemory / 2) : 3), 1, 3);
-  const published = /(^|\.)claudeusercontent\.com$/.test(location.hostname);                    // a published page carries no voice folder
-  const init = (w, model) => { const f = kk.files, m = { type: 'init', base, voice: FACE.voice, voices: {}, folder: !published }, tr = [];
+  const init = (w, model) => { const f = kk.files, m = { type: 'init', base, voice: FACE.voice, voices: {}, folder: !published() }, tr = [];
     if (model) { m.model = model; tr.push(model.buffer); } if (f.wasm) m.wasm = f.wasm.slice(0); if (f.gpuWasm) m.gpuWasm = { kind: f.gpuWasm.kind, data: f.gpuWasm.buf.slice(0) };
     for (const [k, v] of Object.entries(f.voices)) m.voices[k] = new Float32Array(v.slice(0));
     w.postMessage(m, tr); };
@@ -1008,7 +1016,7 @@ function ownVoice() {
     let model = false, own = false, copied = false;
     for (const file of list) { const name = file.name.replace(/^.*[\\/]/, ''), buf = await file.arrayBuffer(), kind = take(name, buf); if (!kind) continue;
       if (kind === 'copied') copied = true; else own = true; model = model || kind === 'model' || kind === 'runtime';
-      try { await store.put(name, buf); if (kind === 'model') await store.drop(name); kk.kept = true; } catch (e) { kk.kept = false; kk.keptWhy = String(e && e.message || e).slice(0, 100); } }
+      try { await store.put(name, buf); if (kind === 'model') await store.drop(name); if (pfile(name)) await store.swap(name); kk.kept = true; } catch (e) { kk.kept = false; kk.keptWhy = String(e && e.message || e).slice(0, 100); } }
     if (copied && pk.boot) { hush(); if (live.beat) { finish(); rest(clock()); setState('idle', 'Ready'); } pk.boot(); }
     if (!own) return;
     if (kk.state === 'needs' && kk.first) { kk.state = 'loading'; kk.step = 'starting'; note(); init(kk.first, mine()); }
@@ -1023,18 +1031,22 @@ function ownVoice() {
 // The copied voice starts if there is a voice to speak in. Its worker says which files are missing; once they are all
 // there it starts, and a second worker is started beside it where the device has the cores.
 function copiedVoice() {
-  const base = new URL('voice/', document.baseURI).href, published = /(^|\.)claudeusercontent\.com$/.test(location.hostname);
+  const base = new URL('voice/', document.baseURI).href;
   if (FACE.pvoice && !pk.pv.me) { const b = atob(FACE.pvoice), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); pk.pv.me = u.buffer; }
-  const lost = why => { pk.state = 'failed'; pk.error = why; voiceList(); note(); };
   const mobile = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  pk.canFull = !published() && !mobile;                     // a published page cannot fetch them (the viewer adds them instead); a phone has not the memory
+  // If the full-precision files cannot be had, the 8-bit ones are gone back to.
+  const lost = why => { if (pk.far) { try { localStorage.removeItem('avatar-full'); } catch (e) {} pk.fullWhy = 'The full-precision files could not be used (' + why + '), so the 8-bit ones are back.'; pk.boot(); return; }
+    pk.state = 'failed'; pk.error = why; voiceList(); note(); };
   const want = () => mobile ? 1 : clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, 2), 1, 2);      // a phone gets one: each worker holds ~200 MB of model
-  const init = w => { const m = { type: 'init', base, folder: !published, voice: Object.keys(pk.pv)[0], files: {}, voices: {} };
+  const init = w => { const m = { type: 'init', base, folder: !published(), voice: Object.keys(pk.pv)[0], files: {}, voices: {} };
+    pk.far = pk.canFull && fullWanted(); if (pk.far) { m.from = {}; for (const k of Object.keys(PFULL)) m.from[k] = PFULL[k][0]; }
     for (const [k, v] of Object.entries(pk.files)) m.files[k] = v.slice(0); if (kk.files.wasm) m.wasm = kk.files.wasm.slice(0);
     for (const [k, v] of Object.entries(pk.pv)) m.voices[k] = new Float32Array(v.slice(0));
     w.postMessage(m); };
   const wire = (w, first) => { const gen = pk.gen; if (first) pk.first = w;
     w.onmessage = e => { const m = e.data; if (gen !== pk.gen) return;
-      if (m.type === 'progress') { if (first) { pk.step = m.step; pk.got = m.got || 0; pk.of = m.of || 0; note(); } }
+      if (m.type === 'progress') { if (first) { pk.step = m.step; pk.got = m.got || 0; pk.of = m.of || 0; pk.mb = m.mb || 0; pk.ofmb = m.ofmb || 0; note(); } }
       else if (m.type === 'need') { if (first) { pk.state = 'needs'; pk.need = m.what; note(); } }
       else if (m.type === 'ready') { pk.pool.push({ w, load: 0 });
         if (first) { pk.state = 'ready'; pk.rtf = m.rtf; pk.threads = m.threads; pk.voices = m.voices; pk.from = m.from; pk.about = m.about; voiceList(); }
@@ -1083,6 +1095,7 @@ function ownTalker(lines, prep) {
   const est = l => l.secs || l.text.length / E.cps, alive = () => my === live.seq && live.turn === lines && !q.over;
   const ready = () => { if (!q.prep) { q.prep = clock(); prep(); } };
   const got = (i, m) => {
+    if (lines[i] && lines[i].by) lines[i].by.at = wall();
     if (!alive()) return; const l = lines[i]; l.made = true;
     if (m.type !== 'said' || m.empty) { l.skip = true; if (m.type === 'error') { E.state = 'failed'; E.error = m.message; voiceList(); note(); } }
     else { E.last = { took: m.took, g2p: m.g2p, secs: m.secs, at: wall() - q.t0, first: i === 0, parts: m.parts }; E.rtf = clamp(0.5 * E.rtf + 0.5 * m.took / m.secs, 0.02, 20); E.cps = clamp(0.7 * E.cps + 0.3 * l.text.length / m.secs, 8, 25); l.sp = m.sp; l.secs = m.secs; l.buf = actx.createBuffer(1, m.audio.length, 24000); l.buf.getChannelData(0).set(m.audio); }
@@ -1096,12 +1109,15 @@ function ownTalker(lines, prep) {
       if (!q.on) {
         // The first line could start now. If this device makes speech slower than it is spoken, starting now would leave
         // long silences between lines, so the start waits until the lines still being made can keep up, to within a pause.
-        let wait = 0, P = 0; const R = new Map();
-        for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (!l2.made) { R.set(l2.by, (R.get(l2.by) || 0) + E.rtf * est(l2)); wait = Math.max(wait, R.get(l2.by) - P); } }
+        // (for each worker: what its unmade lines will take, less the time the one it is on has had already)
+        let wait = 0, P = 0; const R = new Map(), t = wall();
+        for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (l2.made) continue;
+          let r = E.rtf * est(l2); if (!R.has(l2.by)) r = Math.max(0.1, r - (t - Math.max(l2.sent, l2.by.at || 0))); R.set(l2.by, (R.get(l2.by) || 0) + r); wait = Math.max(wait, R.get(l2.by) - P); }
         const lead = Math.max(clamp(wait, 0, HOLD), q.prep ? clamp(q.prep + 0.45 - clock(), 0.06, 0.45) : 0.45);
         if (!q.prep) setTimeout(() => alive() && ready(), Math.max(0, lead - 0.45) * 1000);                 // the breath before the first word
         when = now + lead; q.on = true; q.held = lead;
-      } else when = Math.max(now + 0.06, q.end + GAP);
+      } else when = Math.max(now + 0.06, q.end + (q.tight ? 0 : GAP));                    // no pause after an opening cut where nothing was written
+      q.tight = !!l.say;
       const src = actx.createBufferSource(); src.buffer = l.buf; src.connect(actx.destination); src.start(when); q.srcs.push(src);
       l.when = when; q.end = when + l.secs; q.i++;
     }
@@ -1110,7 +1126,7 @@ function ownTalker(lines, prep) {
   return { done,
     add(l) {
       const i = lines.indexOf(l), by = l.by = E.pool.reduce((a, b) => b.load < a.load ? b : a), id = ++E.id, cost = est(l); by.load += cost;
-      E.wait[id] = m => { by.load = Math.max(0, by.load - cost); got(i, m); }; by.w.postMessage({ type: 'say', id, seq: my, text: l.text, voice });
+      l.sent = wall(); E.wait[id] = m => { by.load = Math.max(0, by.load - cost); got(i, m); }; by.w.postMessage({ type: 'say', id, seq: my, text: l.say || l.text, voice });
       if (!q.timed) { q.timed = true; setTimeout(() => alive() && !q.on && ready(), Math.max(0, E.rtf * cost - 0.45) * 1000); }      // the breath, if the first line is expected about now
     },
     end() { q.ended = true; pump(); } };
@@ -1179,7 +1195,7 @@ function note() {
   else if (E === kk && kk.state === 'ready') voice = `The voice is made on this device${kk.about && kk.about.engine === 'gpu' ? ', on its GPU' : ''}, and the lips follow the times the voice model reports. ${pace(kk)}`;
   else if (sel.startsWith('c:') && (kk.state === 'ready' || pk.state === 'ready')) voice = `With this voice ${borrowed}.`;
   else { const lead = pk.state !== 'off' && pk.state !== 'ready' ? pk : kk, what = lead === pk ? 'The copied voice' : "The avatar's own voice";
-    voice = lead.state === 'loading' ? `${what} is loading (${lead === kk && kk.step === 'model' && kk.of ? mb(kk.got) + ' of ' + mb(kk.of) + ' MB' : lead === pk && pk.step === 'model' ? 'file ' + (pk.got + 1) + ' of ' + pk.of : lead.step === 'starting' || lead.step === 'warming' ? 'starting the model' : 'starting'}). Until it is ready, ${borrowed}.`
+    voice = lead.state === 'loading' ? `${what} is loading (${lead === kk && kk.step === 'model' && kk.of ? mb(kk.got) + ' of ' + mb(kk.of) + ' MB' : lead === pk && pk.step === 'model' ? 'file ' + (pk.got + 1) + ' of ' + pk.of + (pk.mb ? ', ' + Math.round(pk.mb) + (pk.ofmb ? ' of ' + Math.round(pk.ofmb) : '') + ' MB' : '') : lead.step === 'starting' || lead.step === 'warming' ? 'starting the model' : 'starting'}). Until it is ready, ${borrowed}.`
       : lead.state === 'needs' ? `${what} is not set up in this browser yet (see below). Until it is, ${borrowed}.`
       : lead.state === 'failed' ? `${what} could not start in this view (${lead.error}). Instead ${borrowed}.` : `Here ${borrowed}.`; }
   tech();
@@ -1205,6 +1221,11 @@ function note() {
     else if (a.engine !== 'gpu' && a.full) parts.push(a.gpuWhy ? `The GPU was tried and could not run the model (${a.gpuWhy}), so the processor does. ` : 'This browser offers the page no GPU, so the full-precision model runs on the processor, which is slower than the 8-bit one. ', link(HF + 'onnx/model_quantized.onnx', 'The 8-bit model (92 MB)'), ' is the one for the processor. ');
     const more = names.filter(n => !kk.voices.includes(n)); if (more.length) { parts.push('More voices (0.5 MB each, kept in this browser): '); more.forEach(n => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), ' ')); }
   }
+  if (pk.state === 'ready' && pk.about && published() && !/Android|iP(hone|ad|od)/.test(navigator.userAgent)) {      // a published page cannot fetch the other precision itself
+    const set = pk.about.full ? PNEED : PFULL, keys = ['lm', 'flow', 'dec'];
+    parts.push(pk.about.full ? 'The copied voice is using its full-precision files. To go back to the 8-bit ones, add them here: ' : 'On some processors the copied voice is faster with its full-precision files (383 MB). To try them, download the three and add them here; "Voice details" then says how long a line takes: ');
+    keys.forEach((k, i) => parts.push(link(set[k][0], set[k][1]), i < keys.length - 1 ? ', ' : '. '));
+  }
   box.hidden = !parts.length; if (box.hidden) return;
   why.textContent = ''; why.append(...parts);
 }
@@ -1213,14 +1234,18 @@ function tech() {
   const el = $('tech'), sel0 = $('voice').value || '';
   if (sel0.startsWith('p:') && pk.state === 'ready' && pk.about) { const a = pk.about, s = v => v.toFixed(2) + ' s', l = pk.last, q = a.parts; el.hidden = false;
     $('techText').textContent = [
-      `Voice: copied from a recording by Pocket TTS (100M, 8-bit), run as WebAssembly on the processor; sounds timed by ZIPA small (8-bit); libraries from the ${pk.from === 'cdn' ? 'CDN' : 'page'}`,
+      `Voice: copied from a recording by Pocket TTS (100M, ${a.full ? 'full precision' : '8-bit'}), run as WebAssembly on the processor; its memory ${a.fits ? 'sized to each line' : 'at the published size, which is slower'}; sounds timed by ZIPA small (8-bit); libraries from the ${pk.from === 'cdn' ? 'CDN' : 'page'}`,
       `Workers: ${pk.pool.length}, one line each at a time; ${pk.threads} thread${pk.threads > 1 ? 's' : ''} per worker (${a.isolated ? 'isolated page' : 'not an isolated page, so one'}); cores this browser reports: ${a.cores || 'not said'}`,
-      `This worker's core: a fixed sum of thirty million square roots took ${Math.round(a.loop)} ms (58 ms on the machine the page was built on, where a line takes about 1.6 times its length to make)`,
+      `This worker's core: a fixed sum of thirty million square roots took ${Math.round(a.loop)} ms (58 ms on the machine the page was built on, where a line takes about 1.2 times its length to make on one thread and 0.7 on four)`,
       `Start-up test: the voice taken in ${s(a.primed)}; first run ${s(a.cold)}; then ${s(a.secs)} of speech made in ${s(a.made)} (${(a.made / a.secs).toFixed(2)} times its length: the words ${s(q.text)}, the voice ${s(q.voice)}, the audio ${s(q.audio)})`,
       l ? `Last line made: ${s(l.secs)} of speech in ${s(l.took)} (${(l.took / l.secs).toFixed(2)} times; pronouncing ${s(l.g2p)}, the words ${s(l.parts.text)}, the voice ${s(l.parts.voice)}, the audio ${s(l.parts.audio)}, timing the sounds ${s(l.parts.timing)}); ready ${s(l.at)} after ${l.first ? 'Send' : 'Send (a later line)'}` : 'Last line made: none yet',
       `Running average shown above: ${pk.rtf.toFixed(2)}`,
       `Files kept in this browser for next time: ${kk.kept ? 'yes' : kk.kept === false ? 'no' + (kk.keptWhy ? ' (' + kk.keptWhy + ')' : '') : 'none added here'}`,
-    ].join('\n'); return; }
+    ].join('\n');
+    $('fullRow').hidden = !pk.canFull; $('full').textContent = a.full ? 'Use the 8-bit files' : 'Try the full-precision files';
+    $('fullWhy').textContent = pk.fullWhy || (a.full ? 'The full-precision files are in use. Compare "Last line made" above with what the 8-bit files gave.' : 'Three larger files (383 MB, fetched once and kept in this browser). On some processors they are faster than the 8-bit ones, on others slower: "Last line made" above says which.');
+    return; }
+  $('fullRow').hidden = true;
   const a = kk.about; el.hidden = !(kk.state === 'ready' && a); if (el.hidden) return;
   const s = v => v.toFixed(2) + ' s', l = kk.last, ua = navigator.userAgent, engine = /Electron/.test(ua) ? 'Electron (Chromium)' : /Edg\//.test(ua) ? 'Edge (Chromium)' : /Chrome\//.test(ua) ? 'Chrome (Chromium)' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari (WebKit)' : 'unknown';
   $('techText').textContent = [
@@ -1235,6 +1260,8 @@ function tech() {
     `Browser engine: ${engine}`,
   ].join('\n');
 }
+$('full').onclick = () => { try { if (fullWanted()) localStorage.removeItem('avatar-full'); else localStorage.setItem('avatar-full', '1'); } catch (e) {} pk.fullWhy = '';
+  if (pk.boot) { hush(); if (live.beat) { finish(); rest(clock()); setState('idle', 'Ready'); } pk.boot(); } };
 $('files').onchange = e => { const list = [...e.target.files]; e.target.value = ''; if (kk.add) kk.add(list); };
 /* ── the conversation ── */
 // The avatar has finished (or been stopped). With hands-free on it is listening again; for a moment after, what is
@@ -1270,12 +1297,30 @@ async function viaApi(text, part) {
 // (sooner still when two workers can make the halves side by side). On a device that makes speech slower than it is
 // spoken even so, Claude is asked for one sentence.
 const slow = () => mode() === 'own' && eng().rtf / Math.max(1, eng().pool.length) > 1;
-function cut(answer) {
-  const out = [];
+// The wait before the first sound is the time it takes to make the first piece, so a reply's opening is cut short: at
+// the first comma (or the like) ten to forty-eight letters in or, in a long sentence that has none, before a small
+// word that starts a phrase. It is cut as soon as that much has been written, without waiting for the sentence to end.
+// `t` is the reply so far; `whole` says no more is coming. Returns where to cut; 0 for no cut (the first sentence is
+// short enough to say whole); -1 while it is too soon to tell.
+const PHRASE = new Set('and but or so because that which who when where while if as than to of in on at for with from by is are was were will would can could should has have had'.split(' '));
+function opening(t, whole) {
+  const m = /[.!?…]+["')\]]*(\s|$)/.exec(t), end = m ? m.index : whole ? t.length : -1, n = end < 0 ? t.length : end;      // where the first sentence ends, once that is written
+  for (let i = 10; i < Math.min(n, 48); i++) if (/[,;:—–]/.test(t[i]) && t[i + 1] === ' ') return n - i >= 16 ? i + 1 : end < 0 ? -1 : 0;      // (what follows the cut must be worth a piece of its own)
+  if (end >= 0 ? n <= 72 : n < 76) return end >= 0 ? 0 : -1;
+  let best = 0; for (let i = 16; i <= 40; i++) if (t[i] === ' ' && PHRASE.has((/^[A-Za-z']+/.exec(t.slice(i + 1)) || [''])[0].toLowerCase()) && Math.abs(i - 26) < Math.abs(best - 26)) best = i;
+  return best;
+}
+// Early in a reply (`early`), on a device that does not make speech comfortably faster than it is spoken, a long
+// sentence with no comma is cut all the same, before a small word that starts a phrase: a short opening followed by a
+// long piece would leave the opening waiting for it.
+function cut(answer, early) {
+  const out = [], own = mode() === 'own', ramp = early && own && eng().rtf > 0.8;
   for (const s of answer.match(/[^.!?…]+[.!?…]*\s*/g) || [answer]) {
-    const t = s.trim(), long = slow() || (mode() === 'own' && eng().pool.length > 1) ? 64 : 110; if (!/[A-Za-z0-9]/.test(t)) continue;
-    const at = []; for (let i = 24; i < t.length - 24; i++) if (/[,;:—]/.test(t[i]) && t[i + 1] === ' ') at.push(i + 1);
-    if (t.length > long && at.length) { const m = at.reduce((a, b) => Math.abs(b - t.length / 2) < Math.abs(a - t.length / 2) ? b : a); out.push({ text: t.slice(0, m).trim() }, { text: t.slice(m).trim() }); } else out.push({ text: t });
+    const t = s.trim(), long = slow() || (own && eng().pool.length > 1) ? 64 : 110; if (!/[A-Za-z0-9]/.test(t)) continue;
+    const at = []; let bare = false; for (let i = 24; i < t.length - 24; i++) if (/[,;:—]/.test(t[i]) && t[i + 1] === ' ') at.push(i + 1);
+    if (t.length > long && !at.length && ramp) { bare = true; for (let i = 24; i < t.length - 24; i++) if (t[i] === ' ' && PHRASE.has((/^[A-Za-z']+/.exec(t.slice(i + 1)) || [''])[0].toLowerCase())) at.push(i); }
+    if (t.length > long && at.length) { const m = at.reduce((a, b) => Math.abs(b - t.length / 2) < Math.abs(a - t.length / 2) ? b : a), a = { text: t.slice(0, m).trim() }; if (bare) a.say = a.text + ','; out.push(a, { text: t.slice(m).trim() }); }
+    else out.push({ text: t });
   }
   return out;
 }
@@ -1290,13 +1335,19 @@ async function turn(text) {
   const prep = () => { if (begun || my !== live.seq) return; begun = true; const ts = clock(); span[0] = ts + 0.45; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe(); setState('speaking', 'Speaking'); };
   // With its own voice the avatar starts on the first sentence while Claude is still writing the rest: each finished
   // sentence goes to the voice as it appears. A borrowed voice needs the whole reply first.
-  const lines = [], own = mode() === 'own', tidy = s => s.replace(/[*_#`]/g, '').slice(0, 600); let used = 0, talker = null, shown = null;
+  const lines = [], own = mode() === 'own', tidy = s => s.replace(/[*_#`]/g, '').slice(0, 600); let used = 0, talker = null, shown = null, opened = !own;
   live.turn = lines; live.cur = -1;
   const take = (whole, last) => {
     if (my !== live.seq) return; whole = tidy(whole);
     if (io.sample || FACE.api) { if (!shown) shown = say('Avatar', whole); else shown(whole); }
+    if (!opened) {                                        // the opening goes to the voice first, on its own
+      const t = whole.slice(used), lead = t.length - t.trimStart().length, o = opening(t.slice(lead), last);
+      if (o > 0) { const text = t.slice(lead, lead + o).trim(), l = { text, first: true }; if (/[A-Za-z0-9]$/.test(text)) l.say = text + ',';      // said as if a comma followed, so the voice does not come down as at a full stop
+        if (/[A-Za-z0-9]/.test(text)) { lines.push(l); talker = talker || ownTalker(lines, prep); talker.add(l); used += lead + o; } }
+      if (o >= 0) opened = true;
+    }
     let upto = whole.length; if (!last) { upto = used; const re = /[.!?…]+["')\]]*\s/g; re.lastIndex = used; for (let m; (m = re.exec(whole));) upto = m.index + m[0].length; }
-    if (upto <= used) return; const fresh = cut(whole.slice(used, upto)); used = upto;
+    if (upto <= used) return; const fresh = cut(whole.slice(used, upto), lines.length < 2); used = upto;
     for (const l of fresh) { if (!lines.length) l.first = true; lines.push(l); if (own) { talker = talker || ownTalker(lines, prep); talker.add(l); } }
   };
   const answer = tidy(await reply(text, whole => take(whole, false))) || (lines.length ? '' : 'Sorry, say that again?');
