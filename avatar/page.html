@@ -672,7 +672,7 @@ function frame() {
     for (let k = live.cur + 1; k < L.length; k++) { const l = L[k]; if (l.skip) continue; if (l.when != null && heard >= l.when - PRE - 0.03) reach(k, ts + l.when - heard); break; }
   }
   const b = live.beat || live.idle, bt = live.beat ? PRE + planned() : ts - live.idle.start, f = a.m.face;
-  c.setTransform(1, 0, 0, 1, -clamp(f.cx - 384, 0, FW - 768), 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  c.setTransform(1, 0, 0, 1, -Math.round(clamp(f.cx - 384, 0, FW - 768)), 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
   drawActor(WHO, ts, { b, bt, zb: 1, zf: 1.02 });
   if (live.beat) {                                                // the caption: the line, with the words said so far in full ink
     let n = 0; while (n < b.wt.length && b.wt[n] <= bt) n++;

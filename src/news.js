@@ -108,7 +108,7 @@ function pitchTrack(str) {
 }
 const pitchAt = (b, bt) => { const x = (bt - b.lead) * 25, i = Math.floor(x); return x < 0 || i >= b.pc.length - 1 ? 0 : b.pc[i] + (b.pc[i + 1] - b.pc[i]) * (x - i); };
 // Per presenter, on the show's clock: where head and body rest, phrase by phrase; the breath; and when they speak.
-const POSE = {}, BREATH = {}, SPOKE = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
+const POSE = {}, BREATH = {}, SPOKE = {}, BLINK = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
 function buildSpeech(b) {
   const sp = b.sp, L = b.lead, segs = [], pauses = [], acc = [], who = b.who, sty = STYLE[who] || 1;
   b.words = sp.words.map(w => w[0]); b.wt = sp.words.map(w => w[1] + L); b.text = b.words.join(' '); b.pc = pitchTrack(sp.f0 || '');
@@ -196,6 +196,8 @@ function buildSpeech(b) {
   const mo = b.mo = { nods: [], brows: [], frowns: [], back: [], blinks: [], phr, first };
   // the syllables that stand out most carry a nod; the highest and strongest of them lift the brows
   for (const a of acc) if (a[1] >= 0.45 && !acc.some(q => q !== a && Math.abs(q[0] - a[0]) < 0.45 && q[1] > a[1])) mo.nods.push([a[0], a[1], hash(a[0], b.ai) < 0.5 ? -1 : 1]);
+  // the other stressed syllables are felt in the head too, a third as far: it keeps time with the speech between the nods
+  for (const a of acc) if (a[1] >= 0.2 && !mo.nods.some(q => Math.abs(q[0] - a[0]) < 0.3)) mo.nods.push([a[0], 0.32 * a[1], hash(a[0], b.ai + 1) < 0.5 ? -1 : 1, 1]);
   for (const a of acc) {
     const far = k => !k.some(q => Math.abs(q[0] - a[0]) < 1.3);
     if (a[1] >= 0.7 && a[2] >= 1.5 && far(mo.brows)) mo.brows.push([a[0], 0.3 + 0.35 * clamp((a[1] - 0.7) / 0.3, 0, 1), 0.1 + 0.25 * hash(a[0], 3)]);
@@ -206,9 +208,19 @@ function buildSpeech(b) {
   for (const [w0, w1] of b.grave || []) mo.frowns.push([b.wt[w0] + 0.05, 0.55, (w1 < b.wt.length ? b.wt[w1] : lastEnd) - b.wt[w0]]);
   // blinks gather at the ends of phrases and at glances; listeners nod at some phrase ends
   // (never two close together, and never in the last moments of a line, where a cut would land on closed eyes)
-  const blinkAt = t => { if (t < b.dur - 0.5 && !mo.blinks.some(q => Math.abs(q - t) < 0.9)) mo.blinks.push(t); };
+  // BLINK keeps them on the show's clock, so that a blink is not followed at once by another from the next line or a stray one
+  const BL = BLINK[who] = BLINK[who] || [], blinkAt = t => { if (t < b.dur - 0.5 && !BL.some(q => Math.abs(q - b.start - t) < 1.1)) { mo.blinks.push(t); BL.push(b.start + t); if (BL.length > 400) BL.shift(); } };
   mo.looks = (b.look || []).map(([w0, w1, gx, gy, turn]) => { const t0 = b.wt[w0] - 0.12, t1 = w1 < b.wt.length ? b.wt[w1] - 0.05 : b.dur + 1; blinkAt(t0 - 0.03); blinkAt(t1 + 0.02); return [t0, t1, gx, gy, turn || 0]; });
   phr.forEach((p, k) => { if (hash(k, b.ai + 2) < 0.5) blinkAt(p[1] + 0.03 + 0.1 * hash(k, b.ai)); if (k < phr.length - 1 && hash(k, b.ai + 5) < 0.5) mo.back.push([p[1] + 0.2, 0.5]); });
+  // A speaker does not hold the listener's eye throughout: finding the words of a phrase the eyes go aside (a little
+  // down, some of the time) from just before it starts, the head a touch after them, and they are back well before the
+  // phrase ends. About half the longer phrases; a blink often rides on the way out, as it does on any large movement of the eyes.
+  mo.glances = []; phr.forEach((p, k) => {
+    const t0 = p[0] - 0.3 + 0.2 * hash(k, b.ai + 7), t1 = Math.min(t0 + 0.5 + 0.6 * hash(k + 0.2, b.ai + 7), p[1] - 0.35);
+    if (p[1] - p[0] < 0.9 || t1 - t0 < 0.35 || hash(k + 0.6, b.ai + 6) > 0.55 || mo.looks.some(l => l[0] < t1 + 0.6 && l[1] > t0 - 0.6)) return;
+    mo.glances.push([t0, t1, (hash(k + 0.4, b.ai + 7) < 0.5 ? -1 : 1) * (0.45 + 0.4 * hash(k + 0.8, b.ai + 7)), hash(k + 0.1, b.ai + 8) < 0.4 ? 0.14 : 0]);
+    if (hash(k + 0.3, b.ai + 8) < 0.45) blinkAt(t0 - 0.03);
+  });
   mo.shakes = (b.shake || []).map(([w0, w1]) => [b.wt[w0] - 0.05, w1 < b.wt.length ? b.wt[w1] : lastEnd + 0.1]);
   // where the head rests during each phrase: it shifts as a new phrase begins, and settles when the line is over
   // The body resettles too, on some phrases, to the side the head turns: x a shift of weight (in eye distances), w a turn
@@ -216,7 +228,7 @@ function buildSpeech(b) {
   const P = POSE[who] = POSE[who] || POSE0.slice(); let sgn = P[P.length - 1].y > 0 ? 1 : -1;
   phr.forEach((p, k) => {
     sgn = hash(k + 0.5, b.ai) < 0.72 ? -sgn : sgn; const z = P[P.length - 1], mv = hash(k + 0.7, b.ai) < 0.45;       // the head resettles for every phrase, the body for fewer than half
-    P.push({ t: b.start + p[0] - 0.22, y: sgn * (0.1 + 0.3 * hash(k, b.ai + 1)) * sty, p: (hash(k + 0.2, b.ai) - 0.5) * 0.22 * sty, r: (hash(k + 0.4, b.ai) - 0.5) * 0.03 * sty,
+    P.push({ t: b.start + p[0] - 0.22, y: sgn * (0.1 + 0.3 * hash(k, b.ai + 1)) * sty, p: (hash(k + 0.2, b.ai) - 0.5) * 0.22 * sty, r: (hash(k + 0.4, b.ai) - 0.5) * 0.07 * sty,
       x: mv ? sgn * (0.02 + 0.05 * hash(k + 0.9, b.ai)) * sty : z.x, w: mv ? sgn * (0.15 + 0.4 * hash(k + 0.1, b.ai + 3)) : z.w, l: (hash(k + 0.3, b.ai + 4) - 0.35) * 0.7 });
   });
   const z = P[P.length - 1]; P.push({ t: b.start + lastEnd + 0.1, y: z.y * 0.35, p: 0, r: z.r * 0.35, x: z.x * 0.5, w: z.w * 0.4, l: 0 });
@@ -237,7 +249,7 @@ function buildSpeech(b) {
 // Lays the bulletin out on its clock from a set of recordings. Called once here; the demo page calls it again to switch voices.
 const BEATS = []; let SHOW_LEN = 0;
 function buildShow(speech) {
-  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
+  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE, BLINK]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
   SHOW.forEach(L => {
     const b = Object.assign({ start: SHOW_LEN }, L);
     if (L.text && !L.split) { b.strap = !seen[L.who]; seen[L.who] = true; }      // name strap the first time someone is on camera
@@ -336,28 +348,43 @@ const holdShape = (x, hold) => rise(x, -0.18, -0.02) * (1 - rise(x, hold, hold +
 function faceAt(id, b, bt, ts, still) {
   const a = ACT[id], sd = a.m.seed, sty = STYLE[id] || 1, talk = b.sp && b.who === id, mo = b.mo, sp = talk ? speechAt(b, bt, id) : null;
   const P = postureAt(POSE[id] || POSE0, ts), q = { o: sp ? sp.o : 0, s: sp ? sp.s : 0, g: Math.max(b.sp ? smileAt(b, bt, id) : 0, 0.5 * restAt(id, ts)), on: !!(sp && sp.on) };
-  let yaw = P[0] + 0.07 * wob(ts * 0.5, sd), pit = P[1] + 0.05 * wob(ts * 0.6, sd + 3), roll = P[2] + 0.0035 * wob(ts * 0.45, sd + 7), bu = 0, bd = 0, emph = 0, blink = 0;
-  // the eyes dart a little all the time
-  const slot = Math.floor(ts / 0.85), tg = k => [(hash(k, sd) - 0.5) * 0.5, hash(k + 0.3, sd) < 0.2 ? 0.3 * hash(k + 0.7, sd) : 0], g0 = tg(slot - 1), g1 = tg(slot);
+  let yaw = P[0] + 0.1 * wob(ts * 0.5, sd), pit = P[1] + 0.07 * wob(ts * 0.6, sd + 3), roll = P[2] + 0.005 * wob(ts * 0.45, sd + 7), bu = 0, bd = 0, emph = 0, blink = 0;
+  // Nobody holds a pose for long, speaking or not: every few seconds, at no fixed interval, the head resettles a little
+  // (a slight turn, tilt and lift, taken up over most of a second). Without it a listener is a photograph that blinks.
+  { const k = Math.floor(ts / 4.7), e = rise(ts, k * 4.7 + 2.6 * hash(k + 0.4, sd), k * 4.7 + 2.6 * hash(k + 0.4, sd) + 0.85), v = (j, n) => hash(j, sd + n) - 0.5;
+    yaw += 0.5 * (v(k - 1, 31) + (v(k, 31) - v(k - 1, 31)) * e); pit += 0.28 * (v(k - 1, 33) + (v(k, 33) - v(k - 1, 33)) * e); roll += 0.03 * (v(k - 1, 35) + (v(k, 35) - v(k - 1, 35)) * e); }
+  // the eyes dart a little all the time (sideways mostly: the downward pose lowers the lids, and looks sleepy if it is used often)
+  const slot = Math.floor(ts / 0.85), tg = k => [(hash(k, sd) - 0.5) * 0.5, hash(k + 0.3, sd) < 0.12 ? 0.14 * hash(k + 0.7, sd) : 0], g0 = tg(slot - 1), g1 = tg(slot);
   const ge = clamp((ts - (slot * 0.85 + hash(slot + 0.1, sd) * 0.5)) / 0.045, 0, 1); let gx = g0[0] + (g1[0] - g0[0]) * ge, gy = g0[1] + (g1[1] - g0[1]) * ge;
   if (talk) {
     const x0 = bt - mo.first;                                    // just before speaking: a breath, chin and brows lift slightly
     const prep = rise(x0, -0.42, -0.14) * (1 - rise(x0, -0.06, 0.16)); pit -= 0.1 * prep; bu += 0.1 * prep;
-    for (const [t, A, side] of mo.nods) { const n = A * nodShape(bt - t); pit += 0.55 * sty * n; yaw += 0.12 * side * n; roll += 0.006 * side * n; emph += A * gauss(bt - t, 0.22); }
+    for (const [t, A, side, minor] of mo.nods) { const n = A * nodShape(bt - t); pit += 0.55 * sty * n; yaw += 0.12 * side * n; roll += 0.006 * side * n; if (!minor) emph += A * gauss(bt - t, 0.22); }
     if (sp.on) pit -= 0.028 * clamp(pitchAt(b, bt), -5, 6) + 0.05 * Math.max(0, sp.o);         // the head rides the pitch of the voice, and tips back a touch as the jaw drops
+    // and it is never still while its owner talks: it wanders, faster and further than at rest, eased in and out with the line
+    const live = rise(bt, mo.first - 0.2, mo.first + 0.5) * (1 - rise(bt, b.t1 - 0.3, b.t1 + 0.5)) * sty;
+    yaw += 0.13 * live * wob(ts * 1.15, sd + 21); pit += 0.09 * live * wob(ts * 1.4, sd + 25); roll += 0.007 * live * wob(ts * 0.9, sd + 29);
     for (const [t, A, hold] of mo.brows) { const h = A * holdShape(bt - t, hold); bu += h * Math.min(1.15, sty); if (hold > 0.4) { pit -= 0.14 * h; roll += 0.012 * h; } }
     for (const [t, A, hold] of mo.frowns) bd += A * holdShape(bt - t, hold);
     if (sp.on) bu += 0.02 * clamp(pitchAt(b, bt), 0, 6);
     for (const [t0, t1] of mo.shakes) yaw += 0.3 * Math.sin((bt - t0) * 11.5) * rise(bt, t0, t0 + 0.15) * (1 - rise(bt, t1 - 0.2, t1 + 0.1));
     for (const [t0, t1, lx, ly, turn] of mo.looks) { const e = rise(bt, t0, t0 + 0.08) * (1 - rise(bt, t1, t1 + 0.08)), h = rise(bt, t0 - 0.05, t0 + 0.4) * (1 - rise(bt, t1 - 0.05, t1 + 0.45)); gx += (lx - gx) * e; gy += (ly - gy) * e; yaw += turn * h; }
+    for (const [t0, t1, lx, ly] of mo.glances) { const e = rise(bt, t0, t0 + 0.06) * (1 - rise(bt, t1, t1 + 0.07)), h = rise(bt, t0 + 0.03, t0 + 0.4) * (1 - rise(bt, t1, t1 + 0.4)); gx += (lx - gx) * e; gy += (ly - gy) * e; yaw += 0.1 * lx * h; }
     for (const t of mo.blinks) blink = Math.max(blink, blinkShape(bt - t));
-  } else if (mo) for (const [t, A] of mo.back) pit += 0.34 * A * (nodShape(bt - t) + 0.6 * nodShape(bt - t - 0.3));      // a listener's small double nod
-  // other blinks fall irregularly, but not right next to one that belongs to the speech
-  for (let k = Math.floor(ts / 1.25) - 1; k <= Math.floor(ts / 1.25); k++) {
-    if (hash(k, sd) > 0.2) continue; const at = k * 1.25 + hash(k + 0.5, sd) * 0.9;
+  } else {
+    if (mo) for (const [t, A] of mo.back) pit += 0.34 * A * (nodShape(bt - t) + 0.6 * nodShape(bt - t - 0.3));      // a listener's small double nod
+    // someone who is not speaking looks away now and then, briefly, and the head starts after the eyes
+    const k = Math.floor(ts / 6.1), t0 = k * 6.1 + 4 * hash(k + 0.2, sd + 41), t1 = t0 + 0.35 + 0.5 * hash(k + 0.5, sd + 41);
+    if (hash(k, sd + 43) < 0.55) { const lx = (hash(k + 0.7, sd + 41) < 0.5 ? -1 : 1) * (0.35 + 0.3 * hash(k + 0.9, sd + 41)), e = rise(ts, t0, t0 + 0.06) * (1 - rise(ts, t1, t1 + 0.07)); gx += (lx - gx) * e; gy *= 1 - e; yaw += 0.07 * lx * rise(ts, t0 + 0.03, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.4)); }
+  }
+  // other blinks fall irregularly, but not right next to one that belongs to the speech: one in every stretch of about
+  // three seconds, anywhere in it, so they come one to five seconds apart (they used to be drawn with a small chance
+  // every second or so, which now and then left the eyes open for a quarter of a minute)
+  for (let k = Math.floor(ts / 3.1) - 1; k <= Math.floor(ts / 3.1); k++) {
+    const at = k * 3.1 + hash(k + 0.5, sd) * 2.2;
     if (at - b.start > b.dur - 0.5) continue;
-    if (talk && mo.blinks.some(t => Math.abs(b.start + t - at) < 0.7)) continue;
-    blink = Math.max(blink, blinkShape(ts - at), hash(k + 0.2, sd) < 0.14 ? blinkShape(ts - at - 0.33) : 0);                 // now and then a double blink
+    if ((BLINK[id] || []).some(t => Math.abs(t - at) < 1.4)) continue;
+    blink = Math.max(blink, blinkShape(ts - at), hash(k + 0.2, sd) < 0.05 ? blinkShape(ts - at - 0.33) : 0);                 // now and then a double blink
   }
   if (still) { yaw = pit = roll = emph = 0; }
   q.blink = blink; q.gx = clamp(gx, -1, 1); q.gy = clamp(gy, 0, 1); q.bu = clamp(bu, 0, 0.92); q.bd = clamp(bd, 0, 1);
@@ -424,7 +451,7 @@ const warpGL = (() => {
   // distance below it over which a turn of the shoulders reaches its full size (the collar is near the axis of the
   // turn and hardly moves; the middle of the chest is well in front of it); uWd = (wind, flutter, time);
   // uPin = how far in from the side edges and up from the bottom edge the pinning reaches.
-  gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 aP; attribute vec4 aA, aB, aC; attribute vec3 aM; attribute float aK; uniform vec4 uW, uV, uT, uBd, uBc, uBr, uHr, uWd; uniform vec2 uPin; varying vec2 vUV;
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 aP; attribute vec4 aA, aB, aC; attribute vec3 aM; attribute float aK; uniform vec4 uW, uV, uT, uBd, uBc, uBr, uHr, uWd; uniform vec3 uZ; uniform vec2 uPin; varying vec2 vUV;
     void main() { vec2 d = aA.xy * uW.x + aA.zw * uW.y + aB.xy * uW.z + aB.zw * uW.w + aC.xy * uV.x + aC.zw * uV.y;
       d += aK * (uT.xy + uV.z * vec2(uT.w - aP.y, aP.x - uT.z));
       vec2 q = aP - uBc.xy; float u = (aP.x - uBc.z) * uBc.w; vec2 t = uBd.xy + uBd.z * vec2(-q.y, q.x) + uBd.w * q;
@@ -432,17 +459,31 @@ const warpGL = (() => {
       float ph = dot(aP, vec2(0.05, 0.035));
       t += aM.y * uHr.xy + aM.z * (uWd.xy * (0.75 + 0.25 * sin(ph * 0.7 - uWd.w * 3.1)) + uWd.z * vec2(sin(ph - uWd.w * 8.3), 0.5 * sin(ph * 1.31 - uWd.w * 6.1)));
       d += t * vec2(smoothstep(0.0, uPin.x, aP.x) * smoothstep(0.0, uPin.x, ${FW}.0 - aP.x), smoothstep(0.0, uPin.y, ${FH}.0 - aP.y));
-      vec2 p = aP + d;
+      vec2 p = uZ.xy + (aP + d - uZ.xy) * uZ.z;
       gl_Position = vec4(p.x / ${FW / 2}.0 - 1.0, 1.0 - p.y / ${FH / 2}.0, 0.0, 1.0); vUV = aP / vec2(${FW}.0, ${FH}.0); }`));
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#ifdef GL_FRAGMENT_PRECISION_HIGH
     precision highp float;
     #else
     precision mediump float;
     #endif
-    uniform sampler2D uS; varying vec2 vUV; void main() { gl_FragColor = texture2D(uS, vUV); }`));
+    uniform sampler2D uS; varying vec2 vUV;
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    // The picture is read between its pixels almost everywhere (the mesh moves it by fractions of a pixel), and reading
+    // it as a plain average of the four nearest pixels blurred it: half the fine detail of eyes and hair was lost here.
+    // This is the Catmull-Rom cubic over the sixteen nearest pixels, taken as nine averaged reads; it keeps edges.
+    void main() { vec2 R = vec2(${FW}.0, ${FH}.0), s = vUV * R, c = floor(s - 0.5) + 0.5, f = s - c;
+      vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f)), w1 = 1.0 + f * f * (-2.5 + 1.5 * f), w2 = f * (0.5 + f * (2.0 - 1.5 * f)), w3 = f * f * (-0.5 + 0.5 * f), w12 = w1 + w2;
+      vec2 a = (c - 1.0) / R, b = (c + w2 / w12) / R, e = (c + 2.0) / R;
+      vec4 v = (texture2D(uS, vec2(a.x, a.y)) * w0.x + texture2D(uS, vec2(b.x, a.y)) * w12.x + texture2D(uS, vec2(e.x, a.y)) * w3.x) * w0.y
+             + (texture2D(uS, vec2(a.x, b.y)) * w0.x + texture2D(uS, vec2(b.x, b.y)) * w12.x + texture2D(uS, vec2(e.x, b.y)) * w3.x) * w12.y
+             + (texture2D(uS, vec2(a.x, e.y)) * w0.x + texture2D(uS, vec2(b.x, e.y)) * w12.x + texture2D(uS, vec2(e.x, e.y)) * w3.x) * w3.y;
+      v.a = clamp(v.a, 0.0, 1.0); gl_FragColor = vec4(clamp(v.rgb, 0.0, v.a), v.a); }
+    #else
+    void main() { gl_FragColor = texture2D(uS, vUV); }
+    #endif`));
   gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return null;
   gl.useProgram(pr); const loc = {}; for (const n of ['aP', 'aA', 'aB', 'aC', 'aK', 'aM']) { loc[n] = gl.getAttribLocation(pr, n); gl.enableVertexAttribArray(loc[n]); }
-  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin');
+  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin'), uZ = U('uZ');
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture()); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.viewport(0, 0, FW, FH);
@@ -469,13 +510,13 @@ const warpGL = (() => {
     const ibo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW);
     return { vbo, ibo, n: I.length };
   }
-  w.draw = (a, q, bd, ts) => {
+  w.draw = (a, q, bd, ts, zf) => {
     const m = a.mesh || (a.mesh = mesh(a)), f = a.m.face, B = a.m.body;
     gl.bindBuffer(gl.ARRAY_BUFFER, m.vbo); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
     gl.vertexAttribPointer(loc.aP, 2, gl.FLOAT, false, 72, 0); gl.vertexAttribPointer(loc.aA, 4, gl.FLOAT, false, 72, 8); gl.vertexAttribPointer(loc.aB, 4, gl.FLOAT, false, 72, 24);
     gl.vertexAttribPointer(loc.aC, 4, gl.FLOAT, false, 72, 40); gl.vertexAttribPointer(loc.aK, 1, gl.FLOAT, false, 72, 56); gl.vertexAttribPointer(loc.aM, 3, gl.FLOAT, false, 72, 60);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, a.pf);
-    gl.uniform4f(uW, Math.max(0, q.yaw), Math.max(0, -q.yaw), Math.max(0, q.pit), Math.max(0, -q.pit)); gl.uniform4f(uV, q.bu, q.bd, q.roll, 0); gl.uniform4f(uT, 0, 0, f.cx, f.cy + 1.6 * f.iod); gl.uniform2f(uPin, 0.45 * f.iod, 0.5 * f.iod);
+    gl.uniform4f(uW, Math.max(0, q.yaw), Math.max(0, -q.yaw), Math.max(0, q.pit), Math.max(0, -q.pit)); gl.uniform4f(uV, q.bu, q.bd, q.roll, 0); gl.uniform4f(uT, 0, 0, f.cx, f.cy + 1.6 * f.iod); gl.uniform2f(uPin, 0.45 * f.iod, 0.5 * f.iod); gl.uniform3f(uZ, f.cx, f.cy, zf || 1);
     if (bd && B) {
       // The torso tilts about a point at the waist (below the frame) and leans about the face, so a lean makes the head a
       // touch larger where it is; both are folded into one shift-plus-turn about the face.
@@ -536,11 +577,12 @@ function bodyAt(id, q, ts) {
 function drawActor(id, ts, o) {
   const a = ACT[id], f = a.m.face, q = faceAt(id, o.b, o.bt, ts, o.still), bd = o.still || o.rigid ? null : bodyAt(id, q, ts), gl = warpGL && warpGL.ok;
   compose(a, q);
-  let pic; if (gl) { warpGL.draw(a, q, bd, ts); pic = warpGL.cv; } else pic = warpFlat(a, q.yaw * 0.11 * f.iod, q.pit * 0.08 * f.iod, q.roll);
+  let pic; if (gl) { warpGL.draw(a, q, bd, ts, o.zf); pic = warpGL.cv; }      // the mesh also does the presenter's zoom: one resampling of the picture, not two
+  else pic = warpFlat(a, q.yaw * 0.11 * f.iod, q.pit * 0.08 * f.iod, q.roll);
   if (!o.noBg) { c.save(); c.translate(f.cx, f.cy); c.scale(o.zb, o.zb); c.translate(-f.cx, -f.cy); c.drawImage(a.bg, 0, 0); c.restore(); }
   if (o.mid) o.mid();
   c.save();
-  c.translate(f.cx, f.cy); c.scale(o.zf, o.zf); c.translate(-f.cx, -f.cy);
+  if (!gl) { c.translate(f.cx, f.cy); c.scale(o.zf, o.zf); c.translate(-f.cx, -f.cy); }
   if (!gl && bd) {                 // without the mesh the whole figure leans from its bottom edge (which stays where it is) and rises a little with the breath
     c.transform(1, 0, -bd.sx / (FH - f.cy), 1, bd.sx * FH / (FH - f.cy), 0);
     c.translate(f.cx, FH); c.scale(1, 1 + bd.lean + 0.6 * bd.lift / (FH - f.cy)); c.translate(-f.cx, -FH);

@@ -57,6 +57,24 @@ def plain_plate(bgr, alpha, reach=12):
                 q = best[1] if rng.random() < 0.5 else best[1][::-1]; q = q if rng.random() < 0.5 else q[:, ::-1]; hh, ww = min(96, cur.shape[0] - y), min(96, cur.shape[1] - x); noise[y:y + hh, x:x + ww] = q[:hh, :ww]
         cur[hole] += noise[hole]
     return np.clip(cur, 0, 255)
+DETAIL = {"me"}                                              # a real photograph: its own fine detail is put back into every pose (photo_detail)
+QUALITY = dict(me=(86, 96))                                  # WebP quality of the poses and of the cut-out, where detail was put back (80 and 88 otherwise)
+def photo_detail(R, frame):
+    """A re-posed render with the photograph's fine detail. The model that re-poses the face draws it a little soft:
+    pores, stubble, single brow hairs and lashes and the rim of the iris are in the photograph and not in its renders,
+    and the page is made of the renders wherever a mouth or an eye can change. Here the photograph is moved onto the
+    render (dense optical flow from the render to the photograph), and what is finer than a few pixels is taken from
+    the moved photograph instead of the render: detail from the camera, shape and shading from the render. Not where
+    the two disagree about what is there (teeth and the inside of the mouth, a lid over the eye, an iris that has
+    turned): there the render is kept as it is. Detail travels with the skin, so it does not stay behind when the jaw
+    drops."""
+    H, W = R.shape[:2]; bl = lambda im, s: cv2.GaussianBlur(im, (0, 0), s); gray = lambda im: cv2.cvtColor(np.clip(im, 0, 255).round().astype(np.uint8), cv2.COLOR_RGB2GRAY)
+    dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM); dis.setFinestScale(0); f = bl(dis.calc(gray(R), gray(frame), None), 1.0)
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32); mx, my = xx + f[..., 0], yy + f[..., 1]
+    lin = cv2.remap(frame, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE); wp = np.clip(cv2.remap(frame, mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE), lin - 12, lin + 12)
+    band = lambda im: bl(im, 2.2) - bl(im, 8)                                                    # shapes a few pixels across: both pictures have them, if they show the same thing
+    agree = bl(np.clip(1 - (bl(np.abs(band(wp) - band(R)).mean(axis=2), 2.5) - 2.0) / 3.0, 0, 1), 1.5)
+    return np.clip(R + agree[..., None] * ((wp - bl(wp, 2.5)) - (R - bl(R, 2.5))), 0, 255)
 def uri(im, fmt="WEBP", **kw):
     b = io.BytesIO(); im.save(b, fmt, **kw); return f"data:image/{fmt.lower()};base64," + base64.b64encode(b.getvalue()).decode()
 def export(key, idx):
@@ -94,16 +112,19 @@ def export(key, idx):
         # opened. The region now fades out between 6 and 1.5 pixels inside the outline: the outline is always the photograph's.
         Mm = Mm * np.clip((cv2.distanceTransform((alpha > 127).astype(np.uint8), cv2.DIST_L2, 5) - 1.5) / 4.5, 0, 1)
     Me = softmask(list(eyes.values()), ell(0.05, 1.2, 0.25), grow=0.06, feather=0.035)          # lids and eyeballs only: the brows are moved, not swapped
+    raw = F, n; qm, qf = QUALITY.get(key, (80, 88))
+    if key in DETAIL: n = photo_detail(n, frame); F = {k: photo_detail(v, frame) for k, v in F.items()}      # after the masks, which are about where the poses differ
     U = np.maximum(Mm, Me)[..., None]; base = frame * (1 - U) + n * U                              # the photo now agrees with the renders
     Image.fromarray(base.round().astype(np.uint8)).save(f"{d}/frame_lp3.png")
     def region(M, groups):
         ys, xs = np.where(M > 1 / 255); x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
-        rgb = lambda k: uri(Image.fromarray(F[k][y0:y1, x0:x1].round().astype(np.uint8)), quality=80, method=6)
+        rgb = lambda k: uri(Image.fromarray(F[k][y0:y1, x0:x1].round().astype(np.uint8)), quality=qm, method=6)
         mk = np.zeros((y1 - y0, x1 - x0, 4), np.uint8); mk[..., :3] = 255; mk[..., 3] = (M[y0:y1, x0:x1] * 255).round()
         out = dict(x=x0, y=y0, w=x1 - x0, h=y1 - y0, mask=uri(Image.fromarray(mk, "RGBA"), "PNG", optimize=True))
         out.update({g: ([rgb(k) for k in v] if isinstance(v, list) else rgb(v)) for g, v in groups.items()}); return out
     m = region(Mm, mouth); m["p"] = m["p"][0]; m["sh"] = m["sh"][0]; m["jn"] = JN; m["js"] = JS; e = region(Me, eyes)
     # ── motion fields: where each pixel of the neutral face goes in a posed render
+    F, n = raw
     a01 = alpha.astype(np.float32) / 255; k = max(3, int(0.25 * iod)) | 1
     inside = cv2.erode(valid.astype(np.uint8), np.ones((k, k), np.uint8)).astype(np.float32)          # fade to nothing before the crop's edge
     person = cv2.dilate((a01 > 0.1).astype(np.uint8), np.ones((9, 9), np.uint8)).astype(np.float32)     # the background plate does not move
@@ -144,7 +165,7 @@ def export(key, idx):
     plate = plate * (1 - w1) + cv2.GaussianBlur(plate, (0, 0), 4) * w1; plate = plate * (1 - w2) + cv2.GaussianBlur(plate, (0, 0), 12) * w2
     if key in PLAIN: plate = plain_plate(cv2.cvtColor(frame.round().astype(np.uint8), cv2.COLOR_RGB2BGR), alpha)
     bg = Image.fromarray(cv2.cvtColor(plate.round().astype(np.uint8), cv2.COLOR_BGR2RGB)); bg.save(f"{d}/plate3.jpg", quality=90)      # kept to look at
-    ent = dict(bg=uri(bg, "JPEG", quality=86), fg=uri(fg, quality=88, method=6), seed=round(1.0 + idx * 1.7, 2), gain=GAIN[key],
+    ent = dict(bg=uri(bg, "JPEG", quality=86), fg=uri(fg, quality=qf, method=6), seed=round(1.0 + idx * 1.7, 2), gain=GAIN[key],
                face=dict(cx=round(ex, 1), cy=round(ey + 0.45 * iod, 1), iod=round(iod, 1)), mouth=m, eyes=e,
                flow=dict(x=x0, y=y0, step=step, cols=int(cols), rows=int(rows), f=enc), body=json.load(open(f"{d}/body.json")))
     ent.update(EXTRA.get(key, {}))
