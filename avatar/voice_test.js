@@ -7,7 +7,8 @@
 const { chromium } = require('playwright'), http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.join(__dirname), OUT = process.argv[2] || path.join(__dirname, '..', 'tests', 'output', 'voice'), DIR = process.env.VOICE_DIR || 'voice';      // VOICE_DIR=voice_full tries another model laid out the same way
 const TYPES = { '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.html': 'text/html', '.bin': 'application/octet-stream' };
-const LINES = [
+// VOICE_LINES='One line.|Another.' says those (in the voice VOICE_NAME, am_michael if not given) in place of the test sentences.
+const LINES = process.env.VOICE_LINES ? process.env.VOICE_LINES.split('|').map(t => [process.env.VOICE_NAME || 'am_michael', t]) : [
   ['af_heart', "Hi, I'm the avatar. Ask me anything you like."],
   ['af_heart', 'Good question. The lips you are watching are timed by the same model that makes my voice.'],
   ['am_michael', 'Sure, I can do that. Give me a moment to think about it.'],

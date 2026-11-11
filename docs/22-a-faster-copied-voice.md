@@ -88,7 +88,18 @@ network round trip is added. It costs a server that is kept running, or a start 
 **Would other models, as services, be faster?** Yes. Hosted voices built for conversation send the first sound in a
 few tenths of a second on any device, and some copy a voice from a short recording. The lips could still be timed by
 the recogniser in the page, which works on any audio. The cost is a price per character and a recording of the voice
-held by the vendor. Not tried here.
+held by the vendor.
+
+Tried afterwards, on a private copy of the page, with one such service (Cartesia). A line came back 0.4 to 1.2 s
+after it was asked for, whatever the device, and nothing is downloaded. The service reports when each word starts
+and ends; its times for the sounds inside a word turned out to be the word's time divided evenly, so the page
+pronounces the line itself and lays each word's sounds out between the word's start and end. Against a reference
+aligner on eleven lines the service's word times ran 50 ms late; with that taken off, half the sounds sat within
+33 ms of the reference and 90% within 77 ms, a little looser than with the recogniser in the page.
+
+The same test showed where a hosted copy of the page had been losing time that the voice was blamed for: the host
+(Firebase Hosting) hands a streamed reply to the page only once it is complete. Asked at the function's own address
+the first words came after 1.7 s; through the host the whole reply came at once after 2.1 s.
 
 ## To run
 

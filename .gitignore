@@ -30,7 +30,7 @@ avatar/faces/check/
 avatar/index.*.html
 avatar/test_*.png
 demo/avatar-*
-tests/output/voice/
+tests/output/voice*/
 avatar/voice_full/
 avatar/faces/*.pvoice
 tests/output/pocket*/
