@@ -105,6 +105,7 @@ docs/                 the written account
 | [`docs/21-a-copied-voice.md`](docs/21-a-copied-voice.md) | The avatar in a voice copied from a short recording, with a small recogniser timing the sounds in the page |
 | [`docs/20-faster-voice-and-streaming.md`](docs/20-faster-voice-and-streaming.md) | Why the avatar's voice was slow on a fast laptop, running it on a GPU, and speaking while the reply is still being written |
 | [`docs/22-a-faster-copied-voice.md`](docs/22-a-faster-copied-voice.md) | Why the copied voice was slow (a 49 MB cache copied at every step), sizing it to the line, a short opening for each reply, and full-precision files to try |
+| [`docs/23-sharper-and-livelier.md`](docs/23-sharper-and-livelier.md) | Why the face was soft (the page resampled it twice), the photograph's detail put back into the poses, and eyes and a head that behave more like a person's |
 
 ## Known limits
 

@@ -114,6 +114,11 @@ def export(key, idx):
     Me = softmask(list(eyes.values()), ell(0.05, 1.2, 0.25), grow=0.06, feather=0.035)          # lids and eyeballs only: the brows are moved, not swapped
     raw = F, n; qm, qf = QUALITY.get(key, (80, 88))
     if key in DETAIL: n = photo_detail(n, frame); F = {k: photo_detail(v, frame) for k, v in F.items()}      # after the masks, which are about where the poses differ
+    if key in DETAIL:
+        # The model lowers and softens the brows when it shuts the eyes, so a blink blurred the brows for a few pictures.
+        # A blink does not move the brows: above a line a fifth of the eye distance over the eyes, the eye poses are the neutral picture.
+        slope = (lm["eyeR"][1] - lm["eyeL"][1]) / (lm["eyeR"][0] - lm["eyeL"][0]); keep = np.clip((yy - (ey + slope * (xx - ex) - 0.2 * iod)) / (0.07 * iod), 0, 1)[..., None]
+        for k in set(eyes.values()): F[k] = n + keep * (F[k] - n)
     U = np.maximum(Mm, Me)[..., None]; base = frame * (1 - U) + n * U                              # the photo now agrees with the renders
     Image.fromarray(base.round().astype(np.uint8)).save(f"{d}/frame_lp3.png")
     def region(M, groups):

@@ -218,7 +218,8 @@ function buildSpeech(b) {
   mo.glances = []; phr.forEach((p, k) => {
     const t0 = p[0] - 0.3 + 0.2 * hash(k, b.ai + 7), t1 = Math.min(t0 + 0.5 + 0.6 * hash(k + 0.2, b.ai + 7), p[1] - 0.35);
     if (p[1] - p[0] < 0.9 || t1 - t0 < 0.35 || hash(k + 0.6, b.ai + 6) > 0.55 || mo.looks.some(l => l[0] < t1 + 0.6 && l[1] > t0 - 0.6)) return;
-    mo.glances.push([t0, t1, (hash(k + 0.4, b.ai + 7) < 0.5 ? -1 : 1) * (0.45 + 0.4 * hash(k + 0.8, b.ai + 7)), hash(k + 0.1, b.ai + 8) < 0.4 ? 0.14 : 0]);
+    // (far enough to be nearly the whole gaze pose: half-way, the pose and the photograph's eyes show as two irises)
+    mo.glances.push([t0, t1, (hash(k + 0.4, b.ai + 7) < 0.5 ? -1 : 1) * (0.7 + 0.3 * hash(k + 0.8, b.ai + 7)), hash(k + 0.1, b.ai + 8) < 0.4 ? 0.14 : 0]);
     if (hash(k + 0.3, b.ai + 8) < 0.45) blinkAt(t0 - 0.03);
   });
   mo.shakes = (b.shake || []).map(([w0, w1]) => [b.wt[w0] - 0.05, w1 < b.wt.length ? b.wt[w1] : lastEnd + 0.1]);
@@ -325,7 +326,9 @@ function smileAt(b, bt, id) {
   if (b.sm) for (const [who, f0, f1, amp] of b.sm) if (who === id) { const t0 = f0 * b.dur, t1 = f1 * b.dur; w = Math.max(w, (amp || 1) * rise(bt, t0 - 0.05, t0 + 0.4) * (f1 >= 1 ? 1 : 1 - rise(bt, t1, t1 + 0.5))); }
   return w;
 }
-function blinkShape(ph) { return ph <= 0 || ph >= 0.27 ? 0 : ph < 0.065 ? ease(ph / 0.065) : ph < 0.105 ? 1 : 1 - ease((ph - 0.105) / 0.165); }
+// A blink: shut in about a twentieth of a second, hardly held, open again in three times that. (It was held shut for
+// 40 ms and took 270 in all, which on screen is three or four pictures with the eyes shut: a slow, heavy blink.)
+function blinkShape(ph) { return ph <= 0 || ph >= 0.22 ? 0 : ph < 0.055 ? ease(ph / 0.055) : ph < 0.075 ? 1 : 1 - ease((ph - 0.075) / 0.145); }
 function postureAt(P, ts) {                  // every shift eases in over about half a second; shifts that overlap simply add up
   let y = P[0].y, p = P[0].p, r = P[0].r;
   for (let k = 1; k < P.length && P[k].t < ts; k++) { const e = rise(ts, P[k].t, P[k].t + 0.55); y += (P[k].y - P[k - 1].y) * e; p += (P[k].p - P[k - 1].p) * e; r += (P[k].r - P[k - 1].r) * e; }
@@ -339,7 +342,7 @@ function bodyPostureAt(P, ts) {              // the body takes about a second ov
 const breathAt = (id, ts) => { const B = BREATH[id]; return B && B.T ? curve(B.T, B.Y, B.M, ts) : 0.45; };      // how full the lungs are, 0..1
 // A presenter who is not speaking wears the photograph's own slight smile; it lets go just before they speak and comes back after.
 function restAt(id, ts) { let w = 1; for (const [t0, t1] of SPOKE[id] || []) w = Math.min(w, 1 - rise(ts, t0 - 0.45, t0 - 0.15) * (1 - rise(ts, t1 + 0.35, t1 + 1.1))); return w; }
-const nodShape = x => gauss(x - 0.03, 0.085) - 0.3 * gauss(x + 0.17, 0.07);               // a small lift, the drop on the syllable, the return
+const nodShape = x => gauss(x - 0.03, x < 0.03 ? 0.085 : 0.16) - 0.3 * gauss(x + 0.17, 0.07);      // a small lift, the drop on the syllable, and a return that takes twice as long as the drop (as quick as the drop, it was a twitch)
 const holdShape = (x, hold) => rise(x, -0.18, -0.02) * (1 - rise(x, hold, hold + 0.32));
 /* Everything about one face at one moment. b / bt: the line on air and how far into it; ts: the show's clock.
    Returns mouth (o, s, g = smile: 0 relaxed for speech, 0.5 the photograph's own expression, 1 a broad smile), eyes
@@ -353,8 +356,11 @@ function faceAt(id, b, bt, ts, still) {
   // (a slight turn, tilt and lift, taken up over most of a second). Without it a listener is a photograph that blinks.
   { const k = Math.floor(ts / 4.7), e = rise(ts, k * 4.7 + 2.6 * hash(k + 0.4, sd), k * 4.7 + 2.6 * hash(k + 0.4, sd) + 0.85), v = (j, n) => hash(j, sd + n) - 0.5;
     yaw += 0.5 * (v(k - 1, 31) + (v(k, 31) - v(k - 1, 31)) * e); pit += 0.28 * (v(k - 1, 33) + (v(k, 33) - v(k - 1, 33)) * e); roll += 0.03 * (v(k - 1, 35) + (v(k, 35) - v(k - 1, 35)) * e); }
-  // the eyes dart a little all the time (sideways mostly: the downward pose lowers the lids, and looks sleepy if it is used often)
-  const slot = Math.floor(ts / 0.85), tg = k => [(hash(k, sd) - 0.5) * 0.5, hash(k + 0.3, sd) < 0.12 ? 0.14 * hash(k + 0.7, sd) : 0], g0 = tg(slot - 1), g1 = tg(slot);
+  // The eyes rest on the viewer, and dart a little aside about a third of the time (sideways mostly: the downward pose
+  // lowers the lids, and looks sleepy if it is used often). They used to sit a little off centre all the time, which
+  // moved the iris by less than a pixel and cost the eyes a quarter of their sharpness: any gaze pose is a softer
+  // render mixed into the photograph's own eyes.
+  const slot = Math.floor(ts / 0.85), tg = k => hash(k + 0.5, sd) < 0.32 ? [(hash(k, sd) < 0.5 ? -1 : 1) * (0.18 + 0.2 * hash(k + 0.9, sd)), hash(k + 0.3, sd) < 0.3 ? 0.14 * hash(k + 0.7, sd) : 0] : [0, 0], g0 = tg(slot - 1), g1 = tg(slot);
   const ge = clamp((ts - (slot * 0.85 + hash(slot + 0.1, sd) * 0.5)) / 0.045, 0, 1); let gx = g0[0] + (g1[0] - g0[0]) * ge, gy = g0[1] + (g1[1] - g0[1]) * ge;
   if (talk) {
     const x0 = bt - mo.first;                                    // just before speaking: a breath, chin and brows lift slightly
@@ -375,7 +381,7 @@ function faceAt(id, b, bt, ts, still) {
     if (mo) for (const [t, A] of mo.back) pit += 0.34 * A * (nodShape(bt - t) + 0.6 * nodShape(bt - t - 0.3));      // a listener's small double nod
     // someone who is not speaking looks away now and then, briefly, and the head starts after the eyes
     const k = Math.floor(ts / 6.1), t0 = k * 6.1 + 4 * hash(k + 0.2, sd + 41), t1 = t0 + 0.35 + 0.5 * hash(k + 0.5, sd + 41);
-    if (hash(k, sd + 43) < 0.55) { const lx = (hash(k + 0.7, sd + 41) < 0.5 ? -1 : 1) * (0.35 + 0.3 * hash(k + 0.9, sd + 41)), e = rise(ts, t0, t0 + 0.06) * (1 - rise(ts, t1, t1 + 0.07)); gx += (lx - gx) * e; gy *= 1 - e; yaw += 0.07 * lx * rise(ts, t0 + 0.03, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.4)); }
+    if (hash(k, sd + 43) < 0.55) { const lx = (hash(k + 0.7, sd + 41) < 0.5 ? -1 : 1) * (0.65 + 0.25 * hash(k + 0.9, sd + 41)), e = rise(ts, t0, t0 + 0.06) * (1 - rise(ts, t1, t1 + 0.07)); gx += (lx - gx) * e; gy *= 1 - e; yaw += 0.07 * lx * rise(ts, t0 + 0.03, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.4)); }
   }
   // other blinks fall irregularly, but not right next to one that belongs to the speech: one in every stretch of about
   // three seconds, anywhere in it, so they come one to five seconds apart (they used to be drawn with a small chance
@@ -466,7 +472,7 @@ const warpGL = (() => {
     #else
     precision mediump float;
     #endif
-    uniform sampler2D uS; varying vec2 vUV;
+    uniform sampler2D uS; uniform float uK; varying vec2 vUV;
     #ifdef GL_FRAGMENT_PRECISION_HIGH
     // The picture is read between its pixels almost everywhere (the mesh moves it by fractions of a pixel), and reading
     // it as a plain average of the four nearest pixels blurred it: half the fine detail of eyes and hair was lost here.
@@ -477,13 +483,18 @@ const warpGL = (() => {
       vec4 v = (texture2D(uS, vec2(a.x, a.y)) * w0.x + texture2D(uS, vec2(b.x, a.y)) * w12.x + texture2D(uS, vec2(e.x, a.y)) * w3.x) * w0.y
              + (texture2D(uS, vec2(a.x, b.y)) * w0.x + texture2D(uS, vec2(b.x, b.y)) * w12.x + texture2D(uS, vec2(e.x, b.y)) * w3.x) * w12.y
              + (texture2D(uS, vec2(a.x, e.y)) * w0.x + texture2D(uS, vec2(b.x, e.y)) * w12.x + texture2D(uS, vec2(e.x, e.y)) * w3.x) * w3.y;
+      // Even so, a picture read between its pixels comes out softer than it went in (about a third of its finest detail
+      // at half a pixel off). Some of that is given back: the difference from the average of the four neighbours is added
+      // again, in part, and only inside the figure, so that its outline against the set gets no bright or dark rim.
+      vec2 px = 1.0 / R; vec4 n = 0.25 * (texture2D(uS, vUV + vec2(px.x, 0.0)) + texture2D(uS, vUV - vec2(px.x, 0.0)) + texture2D(uS, vUV + vec2(0.0, px.y)) + texture2D(uS, vUV - vec2(0.0, px.y)));
+      v.rgb += uK * step(0.999, min(v.a, n.a)) * (v.rgb - n.rgb);
       v.a = clamp(v.a, 0.0, 1.0); gl_FragColor = vec4(clamp(v.rgb, 0.0, v.a), v.a); }
     #else
     void main() { gl_FragColor = texture2D(uS, vUV); }
     #endif`));
   gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return null;
   gl.useProgram(pr); const loc = {}; for (const n of ['aP', 'aA', 'aB', 'aC', 'aK', 'aM']) { loc[n] = gl.getAttribLocation(pr, n); gl.enableVertexAttribArray(loc[n]); }
-  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin'), uZ = U('uZ');
+  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin'), uZ = U('uZ'); gl.uniform1f(U('uK'), 0.2);
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture()); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.viewport(0, 0, FW, FH);
