@@ -1240,6 +1240,7 @@ function tech() {
       `Start-up test: the voice taken in ${s(a.primed)}; first run ${s(a.cold)}; then ${s(a.secs)} of speech made in ${s(a.made)} (${(a.made / a.secs).toFixed(2)} times its length: the words ${s(q.text)}, the voice ${s(q.voice)}, the audio ${s(q.audio)})`,
       l ? `Last line made: ${s(l.secs)} of speech in ${s(l.took)} (${(l.took / l.secs).toFixed(2)} times; pronouncing ${s(l.g2p)}, the words ${s(l.parts.text)}, the voice ${s(l.parts.voice)}, the audio ${s(l.parts.audio)}, timing the sounds ${s(l.parts.timing)}); ready ${s(l.at)} after ${l.first ? 'Send' : 'Send (a later line)'}` : 'Last line made: none yet',
       `Running average shown above: ${pk.rtf.toFixed(2)}`,
+      replied(),
       `Files kept in this browser for next time: ${kk.kept ? 'yes' : kk.kept === false ? 'no' + (kk.keptWhy ? ' (' + kk.keptWhy + ')' : '') : 'none added here'}`,
     ].join('\n');
     $('fullRow').hidden = !pk.canFull; $('full').textContent = a.full ? 'Use the 8-bit files' : 'Try the full-precision files';
@@ -1256,6 +1257,7 @@ function tech() {
     `Start-up test: first run ${s(a.cold)}; then ${s(a.secs)} of speech made in ${s(a.made)} (${(a.made / a.secs).toFixed(2)} times its length)`,
     l ? `Last line made: ${s(l.secs)} of speech in ${s(l.took)} (${(l.took / l.secs).toFixed(2)} times; pronouncing ${s(l.g2p)}, the model ${s(l.took - l.g2p)}); ready ${s(l.at)} after ${l.first ? 'Send' : 'Send (a later line)'}` : 'Last line made: none yet',
     `Running average shown above: ${kk.rtf.toFixed(2)}`,
+    replied(),
     `Files kept in this browser for next time: ${kk.kept ? 'yes' : kk.kept === false ? 'no' + (kk.keptWhy ? ' (' + kk.keptWhy + ')' : '') : 'none added here'}`,
     `Browser engine: ${engine}`,
   ].join('\n');
@@ -1270,12 +1272,18 @@ function settled() { io.deafUntil = wall() + 1.2; if (io.forget) io.forget(); if
 function setState(s, label) { live.state = s; const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
 function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; return t => { li.lastChild.nodeValue = t; $('log').scrollTop = 1e9; }; }
 // Asks Claude. `part` is called with the whole reply so far, a few times a second, while it is being written.
+const ASKED = 'claude-haiku-5-5';
+const replied = () => io.reply ? `Replies: asked of ${ASKED} on the viewer's quick tier; answered by ${io.reply.model || 'the ' + (io.reply.tier || 'quick') + ' tier, model not said (the named one did not answer)'}; first words after ${io.reply.first.toFixed(2)} s, all after ${io.reply.all.toFixed(2)} s` : io.sample ? 'Replies: none yet' : '';
 async function reply(text, part) {
   if (!io.sample && FACE.api) return viaApi(text, part);
   if (!io.sample) return /[A-Za-z]{2}/.test(text) ? text : "Type a sentence and I will say it.";                 // no Claude in this view: the words typed are the words spoken
   const msgs = [{ role: 'user', content: PERSONA + (slow() ? ' Keep every answer to one short sentence.' : '') }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
   const ctl = live.ctl = new AbortController();
-  try { const r = await io.sample(msgs, { modelTier: 'quick', cache: false, signal: ctl.signal, onText: ({ text }) => part(text) }); return (r.text || '').trim(); }
+  // The viewer does not say which model its "quick" tier is; it only says whether a model the page names answered.
+  // So the page names the current small model and notes what comes back, and how long the first words took.
+  const t0 = wall(); let first = 0;
+  try { const r = await io.sample(msgs, { modelTier: 'quick', model: ASKED, cache: false, signal: ctl.signal, onText: ({ text }) => { if (!first) first = wall() - t0; part(text); } });
+    io.reply = { model: r.modelApplied || '', tier: r.modelTierApplied || '', first, all: wall() - t0 }; tech(); return (r.text || '').trim(); }
   catch (e) { return e && e.text ? e.text.trim() : e && e.code === 'rate_limited' ? 'I need a moment before I can answer again.' : e && e.code === 'cancelled' ? '' : "I couldn't get an answer just now."; }
 }
 // Hosted on its own (FACE.api): the reply comes from the site's own small server (/api/reply), which holds the Claude
