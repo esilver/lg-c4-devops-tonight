@@ -91,7 +91,7 @@ async function init(m) {
   const have = m.files || {}, need = wasm ? [] : ['wasm']; for (const k of Object.keys(FILES)) if (!have[k] && !man) need.push(k);
   if (!Object.keys(m.voices || {}).length) need.push('voice');
   if (need.length) { stage = 'need'; return post({ type: 'need', what: need }); }
-  const threads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+  const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2))) : 1;      // two workers share the cores
   ort.env.wasm.wasmPaths = { mjs: man ? base + 'ort-wasm.js' : ORT + 'ort-wasm-simd-threaded.mjs' }; ort.env.wasm.wasmBinary = wasm; ort.env.wasm.numThreads = threads;
   let got = 0; const total = Object.keys(FILES).length;
   for (const k of Object.keys(FILES)) {

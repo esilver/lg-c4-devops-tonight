@@ -1018,7 +1018,7 @@ function ownVoice() {
   // a voice added while the model was starting, or after: every worker gets it
   const spread = () => { for (const [k, v] of Object.entries(kk.files.voices)) if (!kk.voices.includes(k)) { kk.voices.push(k); for (const p of kk.pool) p.w.postMessage({ type: 'voice', name: k, data: new Float32Array(v.slice(0)) }); } };
   store.all().then(f => { for (const [k, v] of Object.entries(f)) take(k, v); kk.kept = true; }, () => { kk.kept = false; })
-    .then(() => { try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } copiedVoice(); });
+    .then(() => { if (FACE.kokoro === false) { kk.state = 'off'; note(); } else try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } copiedVoice(); });      // a page made for one copied voice does not start the other engine
 }
 // The copied voice starts if there is a voice to speak in. Its worker says which files are missing; once they are all
 // there it starts, and a second worker is started beside it where the device has the cores.
@@ -1179,7 +1179,7 @@ function note() {
       : lead.state === 'needs' ? `${what} is not set up in this browser yet (see below). Until it is, ${borrowed}.`
       : lead.state === 'failed' ? `${what} could not start in this view (${lead.error}). Instead ${borrowed}.` : `Here ${borrowed}.`; }
   tech();
-  $('how').textContent = (io.sample ? 'Replies come from Claude.' : 'Claude is not available in this view, so the avatar says back what you type.') + ' ' + voice;
+  $('how').textContent = (io.sample || FACE.api ? 'Replies come from Claude.' : 'Claude is not available in this view, so the avatar says back what you type.') + ' ' + voice;
   // what the viewer is asked to add, or could add, with where to get it
   const box = $('add'), need = kk.state === 'needs' ? kk.need : [], a = kk.about, ready = kk.state === 'ready' && a;
   const why = $('addWhy'), link = (href, text) => { const el = document.createElement('a'); el.href = href; el.textContent = text; el.target = '_blank'; el.rel = 'noopener'; return el; };
@@ -1240,11 +1240,27 @@ function setState(s, label) { live.state = s; const el = $('state'); el.dataset.
 function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; return t => { li.lastChild.nodeValue = t; $('log').scrollTop = 1e9; }; }
 // Asks Claude. `part` is called with the whole reply so far, a few times a second, while it is being written.
 async function reply(text, part) {
+  if (!io.sample && FACE.api) return viaApi(text, part);
   if (!io.sample) return /[A-Za-z]{2}/.test(text) ? text : "Type a sentence and I will say it.";                 // no Claude in this view: the words typed are the words spoken
   const msgs = [{ role: 'user', content: PERSONA + (slow() ? ' Keep every answer to one short sentence.' : '') }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
   const ctl = live.ctl = new AbortController();
   try { const r = await io.sample(msgs, { modelTier: 'quick', cache: false, signal: ctl.signal, onText: ({ text }) => part(text) }); return (r.text || '').trim(); }
   catch (e) { return e && e.text ? e.text.trim() : e && e.code === 'rate_limited' ? 'I need a moment before I can answer again.' : e && e.code === 'cancelled' ? '' : "I couldn't get an answer just now."; }
+}
+// Hosted on its own (FACE.api): the reply comes from the site's own small server (/api/reply), which holds the Claude
+// API key. A passcode, asked for once and kept in this browser, stops strangers spending it.
+async function viaApi(text, part) {
+  let code = ''; try { code = localStorage.getItem('avatar-code') || ''; } catch (e) {}
+  const msgs = [{ role: 'user', content: PERSONA + (slow() ? ' Keep every answer to one short sentence.' : '') }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
+  const ctl = live.ctl = new AbortController(); let got = '';
+  try {
+    const r = await fetch(FACE.api, { method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json', 'x-passcode': code }, body: JSON.stringify({ messages: msgs }) });
+    if (r.status === 401) { const c = (window.prompt ? window.prompt('Passcode for this avatar') : '') || ''; try { localStorage.setItem('avatar-code', c.trim()); } catch (e) {} return c ? viaApi(text, part) : 'This avatar needs a passcode.'; }
+    if (!r.ok || !r.body) return "I couldn't get an answer just now.";
+    const rd = r.body.getReader(), dec = new TextDecoder();
+    for (;;) { const { done, value } = await rd.read(); if (done) break; got += dec.decode(value, { stream: true }); part(got); }
+    return got.trim();
+  } catch (e) { return got.trim() || (e && e.name === 'AbortError' ? '' : "I couldn't get an answer just now."); }
 }
 // A reply is spoken a sentence at a time; a long sentence is cut once more at a comma, so its first words come sooner
 // (sooner still when two workers can make the halves side by side). On a device that makes speech slower than it is
@@ -1274,7 +1290,7 @@ async function turn(text) {
   live.turn = lines; live.cur = -1;
   const take = (whole, last) => {
     if (my !== live.seq) return; whole = tidy(whole);
-    if (io.sample) { if (!shown) shown = say('Avatar', whole); else shown(whole); }
+    if (io.sample || FACE.api) { if (!shown) shown = say('Avatar', whole); else shown(whole); }
     let upto = whole.length; if (!last) { upto = used; const re = /[.!?…]+["')\]]*\s/g; re.lastIndex = used; for (let m; (m = re.exec(whole));) upto = m.index + m[0].length; }
     if (upto <= used) return; const fresh = cut(whole.slice(used, upto)); used = upto;
     for (const l of fresh) { if (!lines.length) l.first = true; lines.push(l); if (own) { talker = talker || ownTalker(lines, prep); talker.add(l); } }
