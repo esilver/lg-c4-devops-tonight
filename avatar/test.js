@@ -23,7 +23,8 @@ const mocks = (reply, withTts) => {
         while (performance.now() - t0 < dur && !stop) { await new Promise(r => setTimeout(r, 200)); cbs.pos.forEach(f => f({ ms: Math.min(dur, performance.now() - t0), line: i })); }
         await new Promise(r => setTimeout(r, 250)); }
       cbs.state.forEach(f => f({ state: 'idle', reason: stop ? 'viewer_stopped' : 'completed' })); } };
-  let asked = 0; const sample = async () => { await new Promise(r => setTimeout(r, 300)); return { text: reply[Math.min(asked++, reply.length - 1)] }; };
+  // the reply arrives as Claude's does: the whole text so far, a few times a second, then the result
+  let asked = 0; const sample = async (input, opts) => { const text = reply[Math.min(asked++, reply.length - 1)]; window.__asked = performance.now(); for (let i = 1; i <= 8; i++) { await new Promise(r => setTimeout(r, 150)); if (opts && opts.onText) opts.onText({ text: text.slice(0, Math.round(text.length * i / 8)), delta: '' }); } window.__replied = performance.now(); return { text }; };
   window.claude = { use: async n => ({ sample, tts: withTts ? tts : null })[n] || null };
 };
 const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffer), h = Buffer.alloc(44); h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVEfmt ', 8); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22); h.writeUInt32LE(24000, 24); h.writeUInt32LE(48000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40); fs.writeFileSync(f, Buffer.concat([h, pcm])); };

@@ -6,7 +6,8 @@
 
      text -> sounds     eSpeak NG (through the phonemizer package) says how the words are pronounced; its symbols are
                         rewritten here into the alphabet Kokoro was trained on, which is also the engine's
-     sounds -> audio    Kokoro, 8-bit ONNX, run by onnxruntime-web on the processor (WebAssembly); it returns the
+     sounds -> audio    Kokoro as an ONNX file, run by onnxruntime-web: the 8-bit file on the processor (WebAssembly),
+                        or the full-precision file on a GPU where the browser offers one (WebGPU). It returns the
                         waveform and one duration per sound, in steps of 25 ms
      audio -> pitch     measured here from the waveform (autocorrelation), for the nods and brows that follow the voice
 
@@ -45,18 +46,30 @@ async function init(m) {
   // Is the voice folder beside the page? (manifest.json is the last thing get_voice.py writes.)
   step('files'); const man = local = await fetch(base + 'manifest.json').then(r => r.ok ? r.json() : null).catch(() => null);
   for (const [k, v] of Object.entries(m.voices || {})) voices[k] = v;
-  step('runtime');
-  if (man) { ort = await import(base + 'ort.js'); from.runtime = 'page'; }
-  else { try { ort = await import(ORT + 'ort.wasm.min.mjs'); from.runtime = 'cdn'; } catch (e) { throw new Error('the speech runtime could not be loaded from the CDN (' + why(e) + ')'); } }
-  let wasm = m.wasm || null;
-  if (!wasm) wasm = await grab(man ? base + 'ort-wasm.wasm' : ORT + 'ort-wasm-simd-threaded.wasm').catch(() => null);
+  // Which engine. The full-precision model (326 MB; the 8-bit one is 92 MB) can run on a GPU where the browser offers
+  // one (WebGPU), and that is many times faster than the processor. The 8-bit model only runs on the processor.
+  const size = m.model ? m.model.length : man ? man.bytes : 0, full = size > 2e8;
+  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null) : null;
+  const gpu = navigator.gpu ? (adapter ? 'yes' : 'no adapter') : 'no'; let engine = full && adapter && m.gpu !== false ? 'gpu' : 'cpu', gpuWhy = '';
+  // One engine's runtime: the library, its WebAssembly file, and where its glue code is. null if the WebAssembly file cannot be had.
+  const runtime = async eng => {
+    const f = eng === 'gpu' ? ['ort-gpu.js', 'ort.webgpu.min.mjs', 'ort-gpu-wasm.js', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-gpu.wasm', 'ort-wasm-simd-threaded.asyncify.wasm']
+      : ['ort.js', 'ort.wasm.min.mjs', 'ort-wasm.js', 'ort-wasm-simd-threaded.mjs', 'ort-wasm.wasm', 'ort-wasm-simd-threaded.wasm'];
+    let o; try { o = await import(man ? base + f[0] : ORT + f[1]); } catch (e) { throw new Error('the speech runtime could not be loaded from the ' + (man ? 'page' : 'CDN') + ' (' + why(e) + ')'); }
+    const wasm = (eng === 'cpu' && m.wasm) || await grab(man ? base + f[4] : ORT + f[5]).catch(() => null);
+    if (!wasm) return null;
+    o.env.wasm.wasmPaths = { mjs: man ? base + f[2] : ORT + f[3] }; o.env.wasm.wasmBinary = wasm; o.env.wasm.numThreads = threads;
+    return o;
+  };
+  threads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;      // more than one thread needs an isolated page
+  step('runtime'); from.runtime = man ? 'page' : 'cdn';
+  if (engine === 'gpu') { ort = await runtime('gpu').catch(e => { gpuWhy = why(e); return null; }); if (!ort) { engine = 'cpu'; gpuWhy = gpuWhy || 'its runtime file could not be fetched'; } }
+  if (engine === 'cpu') ort = await runtime('cpu');
   step('pronouncer');
   try { ({ phonemize } = await import(man ? base + 'phonemizer.js' : PHON)); await phonemize('ready', 'en-us'); } catch (e) { throw new Error('the pronouncer could not be loaded (' + why(e) + ')'); }
   // What only the viewer can supply: the model, at least one voice, and the runtime's WebAssembly file if the CDN would not give it.
-  const need = []; if (!wasm) need.push('wasm'); if (!m.model && !man) need.push('model'); if (!man && !Object.keys(voices).length) need.push('voice');
+  const need = []; if (!ort) need.push('wasm'); if (!m.model && !man) need.push('model'); if (!man && !Object.keys(voices).length) need.push('voice');
   if (need.length) { stage = 'need'; return post({ type: 'need', what: need }); }
-  ort.env.wasm.wasmPaths = { mjs: man ? base + 'ort-wasm.js' : ORT + 'ort-wasm-simd-threaded.mjs' }; ort.env.wasm.wasmBinary = wasm;
-  threads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1; ort.env.wasm.numThreads = threads;      // more than one thread needs an isolated page
   let bytes = m.model;                                                      // from the viewer's file, or handed on by the first worker
   if (!bytes) {
   step('model', { got: 0, of: man.bytes });
@@ -71,18 +84,29 @@ async function init(m) {
   for (const s of sizes) { offs.push(at); for (const c of s.chunks) { bytes.set(c, at); at += c.length; } }
   if (at !== man.bytes) throw new Error('the model arrived as ' + at + ' bytes, not ' + man.bytes);
   }
-  step('starting'); try { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); } catch (e) { throw new Error('the model could not be started (' + why(e) + ')'); }
-  if (!session.outputNames.includes('durations')) throw new Error('that model file does not report durations; the one needed is model_quantized.onnx from the Kokoro "timestamped" repository');
   const names = man ? man.voices : Object.keys(voices), v0 = names.includes(m.voice) ? m.voice : names[0];
-  step('warming'); await voice(v0);
-  const tw = performance.now(); await run('ðɪs ɪz ə tˈɛst.', v0); const cold = (performance.now() - tw) / 1000;      // the first run is slow (it sets things up); the second is the measure
+  const start = async () => {
+    session = await ort.InferenceSession.create(bytes, { executionProviders: [engine === 'gpu' ? 'webgpu' : 'wasm'] });
+    if (!session.outputNames.includes('durations')) throw new Error('that model file does not report durations; the one needed is from the Kokoro "timestamped" repository');
+    await voice(v0); const t = performance.now(), r = await run('ðɪs ɪz ə tˈɛst.', v0);      // the first run is slow: it sets things up (on a GPU it compiles its programs)
+    let e = 0, bad = r.wave.length < SR / 2; for (let i = 0; i < r.wave.length; i += 7) { const v = r.wave[i]; if (!(Math.abs(v) < 4)) bad = true; e += v * v; }
+    if (bad || !(e > 0) || r.dur.some(d => !(d > 0))) throw new Error('the test line came out wrong');      // a GPU that computes this model badly gives noise or nothing
+    return (performance.now() - t) / 1000;
+  };
+  step('starting'); let cold;
+  try { cold = await start(); }
+  catch (e) {
+    if (engine !== 'gpu') throw new Error('the model could not be started (' + why(e) + ')');
+    gpuWhy = why(e); engine = 'cpu'; ort = await runtime('cpu'); if (!ort) throw new Error('the GPU could not run the model (' + gpuWhy + ') and the processor runtime could not be fetched');
+    try { cold = await start(); } catch (e2) { throw new Error('the model could not be started (' + why(e2) + ')'); }
+  }
+  step('warming');
   const t = performance.now(), r = await run('ænd ðɪs ɪz ɐnˈʌðəɹ wˈʌn, tə sˈi hW fˈæst ɪt ɡˈOz.', v0);
   const made = (performance.now() - t) / 1000;
   // two things worth knowing when the voice is slow: how fast this worker's core is at plain arithmetic, and whether a GPU is on offer
   const tl = performance.now(); let acc = 0; for (let i = 0; i < 3e7; i++) acc += Math.sqrt(i) * 1.0000001; const loop = performance.now() - tl + (acc < 0 ? 1 : 0);
-  const gpu = navigator.gpu ? await navigator.gpu.requestAdapter().then(a => (a ? 'yes' : 'no adapter'), () => 'refused') : 'no';
   stage = 'ready'; post({ type: 'ready', rtf: (performance.now() - t) / 1000 / (r.wave.length / SR), threads, voices: names, from: from.runtime, model: bytes,
-    about: { cold, made, secs: r.wave.length / SR, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, gpu, loop, bytes: bytes.length } }, [bytes.buffer]);      // the runtime has its own copy now; the page may pass this one on
+    about: { cold, made, secs: r.wave.length / SR, cores: navigator.hardwareConcurrency || 0, isolated: !!self.crossOriginIsolated, gpu, engine, gpuWhy, full, loop, bytes: bytes.length } }, [bytes.buffer]);      // the runtime has its own copy now; the page may pass this one on
 }
 async function voice(name) {
   if (!voices[name]) { if (!local) throw new Error('the voice ' + name + ' has not been added'); const r = await fetch(base + 'v_' + name + '.bin'); if (!r.ok) throw new Error('voice ' + name + ': HTTP ' + r.status); voices[name] = new Float32Array(await r.arrayBuffer()); }

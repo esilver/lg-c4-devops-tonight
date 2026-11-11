@@ -242,3 +242,10 @@ The repository turned out to be public, so the face and everything made from it 
 Described in [19](19-rebuild-recipe.md). A reader asked for enough to rebuild the video. A third agent wrote the
 recipe as one skill file, with every step, model, measured setting and dropped attempt, and built a second
 one-pager from it. It was read in full and published as a private page.
+
+## 16. A faster voice and a streamed reply (11 November, published 00:14)
+
+Described in [20](20-faster-voice-and-streaming.md). The voice ran in the real viewer but slower than speech on a
+fast laptop. A readout added to the page showed the 8-bit model, not the processor, to be the limit there, and that
+the browser offered a GPU. The page can now run the full-precision model on a GPU, untested here, and starts
+speaking the first sentence while the reply is still being written.

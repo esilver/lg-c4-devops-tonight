@@ -220,7 +220,7 @@ bodyAt = (id, q, ts) => { const o = body0(id, q, ts); ease1.lift += (o.lift - ea
    audio and the sounds in it with their times, so nothing about the mouth is guessed. It takes a while to arrive
    (92 MB, once) and, on a slow device, longer to make a line than to say it; until it is ready, or if it cannot start
    in this view, a borrowed voice speaks. */
-const kk = { state: 'off', pool: [], rtf: 1.2, cps: 15, step: '', got: 0, of: 0, error: '', wait: {}, id: 0, voices: [], threads: 1, need: [], files: { model: null, wasm: null, voices: {} }, kept: null, from: '' };
+const kk = { state: 'off', gen: 0, pool: [], rtf: 1.2, cps: 15, step: '', got: 0, of: 0, error: '', wait: {}, id: 0, voices: [], threads: 1, need: [], files: { model: null, wasm: null, voices: {} }, kept: null, from: '' };
 const GAP = 0.1, SLACK = 0.35, HOLD = 4;       // seconds between two lines; how much longer a pause may get before the start is held back; the longest it is held
 // Where the voice's parts come from. Run from a disk or a server of one's own, everything is in the folder voice/ beside
 // the page. A page published as a Claude artifact cannot carry the model, so there the two libraries come from a CDN
@@ -228,8 +228,12 @@ const GAP = 0.1, SLACK = 0.35, HOLD = 4;       // seconds between two lines; how
 const HF = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped/resolve/dd4401a9add81ac692d20e240d22ec9dda82cc29/';
 const store = {
   open: () => new Promise((ok, no) => { try { const r = indexedDB.open('avatar-voice', 1); r.onupgradeneeded = () => r.result.createObjectStore('f'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); } catch (e) { no(e); } }),
-  all: async () => { const db = await store.open(); return new Promise((ok, no) => { const out = {}, c = db.transaction('f').objectStore('f').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { out[cur.key] = cur.value; cur.continue(); } else ok(out); }; c.onerror = () => no(c.error); }); },
-  put: async (k, v) => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'); t.objectStore('f').put(v, k); t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
+  // (kept as blobs: a browser stores those as files, where a plain value has a size limit a 326 MB model is over)
+  all: async () => { const db = await store.open(), out = await new Promise((ok, no) => { const o = {}, c = db.transaction('f').objectStore('f').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { o[cur.key] = cur.value; cur.continue(); } else ok(o); }; c.onerror = () => no(c.error); });
+    for (const k of Object.keys(out)) if (out[k] instanceof Blob) out[k] = await out[k].arrayBuffer(); return out; },
+  put: async (k, v) => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'); t.objectStore('f').put(new Blob([v]), k); t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error || new Error('not stored')); }); },
+  // one model at a time is kept: a new one replaces the old
+  drop: async keep => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'), o = t.objectStore('f'), r = o.getAllKeys(); r.onsuccess = () => { for (const k of r.result) if (/\.onnx$/i.test(k) && k !== keep) o.delete(k); }; t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
 };
 // a file the viewer chose, by what its name ends in: the model, the runtime's WebAssembly, or a voice
 function take(name, buf) {
@@ -240,42 +244,50 @@ function take(name, buf) {
 function ownVoice() {
   const base = new URL('voice/', document.baseURI).href; kk.state = 'loading'; note();
   const lost = why => { kk.state = 'failed'; kk.error = why; voiceList(); note(); };
-  // One worker makes one line at a time on one core (more needs a kind of page this is not). So where the device has
-  // the cores and the memory, a second and a third are started, each handed the model the one before it used.
+  // On the processor one worker makes one line at a time on one core (more needs a kind of page this is not). So where
+  // the device has the cores and the memory, a second and a third are started, each handed the model the one before it
+  // used. On a GPU one worker is enough: the GPU is where the work is done.
   const mobile = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const want = clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, mobile ? 2 : 3, navigator.deviceMemory ? Math.floor(navigator.deviceMemory / 2) : 3), 1, 3);
+  const want = () => kk.about && kk.about.engine === 'gpu' ? 1 : clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, mobile ? 2 : 3, navigator.deviceMemory ? Math.floor(navigator.deviceMemory / 2) : 3), 1, 3);
   const init = (w, model) => { const f = kk.files, m = { type: 'init', base, voice: FACE.voice, voices: {} }, tr = [];
     if (model) { m.model = model; tr.push(model.buffer); } if (f.wasm) m.wasm = f.wasm.slice(0);
     for (const [k, v] of Object.entries(f.voices)) m.voices[k] = new Float32Array(v.slice(0));
     w.postMessage(m, tr); };
   const mine = () => { const b = kk.files.model; kk.files.model = null; return b ? new Uint8Array(b) : null; };      // the viewer's model file goes to the first worker, which passes it on
-  const wire = (w, first, model) => { let up = false; if (first) kk.first = w;
-    w.onmessage = e => { const m = e.data; if (first) kk.alive = true;
+  const wire = (w, first, model) => { let up = false; const gen = kk.gen; if (first) kk.first = w;
+    w.onmessage = e => { const m = e.data; if (gen !== kk.gen) return; if (first) kk.alive = true;
       if (m.type === 'progress') { if (first) { kk.step = m.step; if (m.of) { kk.got = m.got; kk.of = m.of; } note(); } }
       else if (m.type === 'need') { if (first) { kk.state = 'needs'; kk.need = m.what; note(); } }
       else if (m.type === 'ready') { up = true; kk.pool.push({ w, load: 0 });
         if (first) { kk.state = 'ready'; kk.rtf = m.rtf; kk.threads = m.threads; kk.voices = m.voices; kk.from = m.from; kk.about = m.about; spread(); voiceList(); }
-        if (kk.pool.length < want && kk.state === 'ready') start(m.model); note(); }
+        if (kk.pool.length < want() && kk.state === 'ready') start(m.model); note(); }
       else if (m.id != null && kk.wait[m.id]) { const f = kk.wait[m.id]; delete kk.wait[m.id]; f(m); }
       else if (m.type === 'error' && m.id == null && first) lost(m.message); };                        // a later worker that fails is simply not used
-    w.onerror = e => { if (e && e.preventDefault) e.preventDefault(); if (!first) { if (up) lost('a voice worker stopped'); return; } if (kk.alive || kk.blob) lost((e && e.message) || 'the worker stopped'); else viaBlob(); };
+    w.onerror = e => { if (e && e.preventDefault) e.preventDefault(); if (gen !== kk.gen) return; if (!first) { if (up) lost('a voice worker stopped'); return; } if (kk.alive || kk.blob) lost((e && e.message) || 'the worker stopped'); else viaBlob(); };
     init(w, model); };
-  const start = model => { try { wire(kk.blob ? new Worker(kk.blob, { type: 'module' }) : new Worker(base + 'worker.js', { type: 'module' }), false, model); } catch (e) {} };
+  const fresh = () => kk.blob && kk.blob !== 'pending' ? new Worker(kk.blob, { type: 'module' }) : new Worker(base + 'worker.js', { type: 'module' });
+  const start = model => { try { wire(fresh(), false, model); } catch (e) {} };
   // Some views only allow a worker made from a blob. The worker loads everything else by full address, so it works either way.
   const viaBlob = () => { kk.blob = 'pending'; fetch(base + 'worker.js').then(r => { if (!r.ok) throw new Error('worker.js: HTTP ' + r.status); return r.text(); })
     .then(src => { kk.blob = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); wire(new Worker(kk.blob, { type: 'module' }), true, mine()); }).catch(e => lost(String(e && e.message || e))); };
-  // Files the viewer adds: kept for next time, then either the first worker starts again with them or a new voice is passed round.
+  // Starting over (a different model was added): the old workers go, and whatever they were making is abandoned.
+  const boot = () => { for (const p of kk.pool) try { p.w.terminate(); } catch (e) {} try { if (kk.first) kk.first.terminate(); } catch (e) {}
+    kk.gen++; kk.pool = []; kk.wait = {}; kk.first = null; kk.alive = false; kk.about = null; kk.last = null; kk.voices = []; kk.state = 'loading'; kk.step = 'starting'; voiceList(); note();
+    try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } };
+  // Files the viewer adds are kept for next time. A model starts the voice (again); a voice is passed round the workers.
   kk.add = async list => {
-    const fresh = [];
-    for (const file of list) { const buf = await file.arrayBuffer(); if (!take(file.name, buf)) continue; fresh.push(file.name); try { await store.put(file.name.replace(/^.*[\\/]/, ''), buf); kk.kept = true; } catch (e) { kk.kept = false; } }
-    if (!fresh.length) return;
-    if (kk.state === 'needs' || kk.state === 'failed') { kk.state = 'loading'; kk.step = 'starting'; note(); init(kk.first, mine()); }
+    let model = false, any = false;
+    for (const file of list) { const name = file.name.replace(/^.*[\\/]/, ''), buf = await file.arrayBuffer(); if (!take(name, buf)) continue; any = true; const isModel = /\.onnx$/i.test(name); model = model || isModel;
+      try { await store.put(name, buf); if (isModel) await store.drop(name); kk.kept = true; } catch (e) { kk.kept = false; kk.keptWhy = String(e && e.message || e).slice(0, 100); } }
+    if (!any) return;
+    if (kk.state === 'needs' && kk.first) { kk.state = 'loading'; kk.step = 'starting'; note(); init(kk.first, mine()); }
+    else if (model || kk.state === 'failed') { hush(); if (live.beat) { finish(); rest(clock()); setState('idle', 'Ready'); } boot(); }
     else if (kk.state === 'ready') { spread(); voiceList(); note(); }
   };
   // a voice added while the model was starting, or after: every worker gets it
   const spread = () => { for (const [k, v] of Object.entries(kk.files.voices)) if (!kk.voices.includes(k)) { kk.voices.push(k); for (const p of kk.pool) p.w.postMessage({ type: 'voice', name: k, data: new Float32Array(v.slice(0)) }); } };
   store.all().then(f => { for (const [k, v] of Object.entries(f)) take(k, v); kk.kept = true; }, () => { kk.kept = false; })
-    .then(() => { try { wire(new Worker(base + 'worker.js', { type: 'module' }), true, mine()); } catch (e) { viaBlob(); } });
+    .then(() => { try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } });
 }
 // Sound may only start inside a tap. iPhones also mute a page's sound with the ringer switch unless the page asks for a
 // playback session or keeps a silent <audio> element going (docs/14); neither does anything elsewhere.
@@ -295,44 +307,46 @@ function sound() {
     const s = actx.createBufferSource(); s.buffer = actx.createBuffer(1, 1, actx.sampleRate); s.connect(actx.destination); s.start(0);
   } catch (e) {}
 }
-// Speaks a reply with the avatar's own voice. Every line is asked for at once and made in order; each is scheduled on
-// the audio clock as it arrives, and frame() starts its mouth when that moment comes. Resolves when the last has played.
-function speakOwn(lines, prep) {
-  return new Promise(done => {
-    const my = live.seq, voice = $('voice').value.slice(2);
-    const q = live.q = { lines, i: 0, end: 0, srcs: [], on: false, prep: 0, t0: wall(), done: () => { if (q.over) return; q.over = true; if (live.q === q) live.q = null; done(); } };
-    const est = l => l.secs || l.text.length / kk.cps, alive = () => my === live.seq && live.turn === lines && !q.over;
-    const ready = () => { if (!q.prep) { q.prep = clock(); prep(); } };
-    const got = (i, m) => {
-      if (!alive()) return; const l = lines[i]; l.made = true;
-      if (m.type !== 'said' || m.empty) { l.skip = true; if (m.type === 'error') { kk.state = 'failed'; kk.error = m.message; voiceList(); note(); } }
-      else { kk.last = { took: m.took, g2p: m.g2p, secs: m.secs, at: wall() - q.t0, n: lines.length }; kk.rtf = clamp(0.5 * kk.rtf + 0.5 * m.took / m.secs, 0.05, 20); kk.cps = clamp(0.7 * kk.cps + 0.3 * l.text.length / m.secs, 8, 25); l.sp = m.sp; l.secs = m.secs; l.buf = actx.createBuffer(1, m.audio.length, 24000); l.buf.getChannelData(0).set(m.audio); }
-      tech(); pump();
-    };
-    const pump = () => {
-      while (q.i < lines.length && lines[q.i].made) {
-        const l = lines[q.i], now = actx.currentTime; let when;
-        if (l.skip) { q.i++; continue; }
-        if (!q.on) {
-          // The first line could start now. If this device makes speech slower than it is spoken, starting now would leave
-          // long silences between lines, so the start waits until the lines still being made can keep up, to within a pause.
-          let wait = 0, P = 0; const R = new Map();
-          for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (!l2.made) { R.set(l2.by, (R.get(l2.by) || 0) + kk.rtf * est(l2)); wait = Math.max(wait, R.get(l2.by) - P); } }
-          const lead = Math.max(clamp(wait, 0, HOLD), q.prep ? clamp(q.prep + 0.45 - clock(), 0.06, 0.45) : 0.45);
-          if (!q.prep) setTimeout(() => alive() && ready(), Math.max(0, lead - 0.45) * 1000);                 // the breath before the first word
-          when = now + lead; q.on = true; q.held = lead;
-        } else when = Math.max(now + 0.06, q.end + GAP);
-        const src = actx.createBufferSource(); src.buffer = l.buf; src.connect(actx.destination); src.start(when); q.srcs.push(src);
-        l.when = when; q.end = when + l.secs; q.i++;
-      }
-      if (q.i >= lines.length && !q.closing) { q.closing = true; setTimeout(q.done, Math.max(0, q.on ? q.end - actx.currentTime + 0.3 : 0) * 1000); }
-    };
-    lines.forEach((l, i) => {                                                                                // each line goes to the worker with the least to do
-      const by = l.by = kk.pool.reduce((a, b) => b.load < a.load ? b : a), id = ++kk.id, cost = est(l); by.load += cost;
+// Speaks a reply with the avatar's own voice. Lines are handed over as they are written (add), each is made by the
+// worker with the least to do and scheduled on the audio clock as it arrives, and frame() starts its mouth when that
+// moment comes. `done` resolves when the last line has played (after end() says there are no more).
+function ownTalker(lines, prep) {
+  let settle; const done = new Promise(r => { settle = r; });
+  const my = live.seq, voice = $('voice').value.slice(2);
+  const q = live.q = { lines, i: 0, end: 0, srcs: [], on: false, prep: 0, t0: wall(), ended: false, timed: false, done: () => { if (q.over) return; q.over = true; if (live.q === q) live.q = null; settle(); } };
+  const est = l => l.secs || l.text.length / kk.cps, alive = () => my === live.seq && live.turn === lines && !q.over;
+  const ready = () => { if (!q.prep) { q.prep = clock(); prep(); } };
+  const got = (i, m) => {
+    if (!alive()) return; const l = lines[i]; l.made = true;
+    if (m.type !== 'said' || m.empty) { l.skip = true; if (m.type === 'error') { kk.state = 'failed'; kk.error = m.message; voiceList(); note(); } }
+    else { kk.last = { took: m.took, g2p: m.g2p, secs: m.secs, at: wall() - q.t0, first: i === 0 }; kk.rtf = clamp(0.5 * kk.rtf + 0.5 * m.took / m.secs, 0.02, 20); kk.cps = clamp(0.7 * kk.cps + 0.3 * l.text.length / m.secs, 8, 25); l.sp = m.sp; l.secs = m.secs; l.buf = actx.createBuffer(1, m.audio.length, 24000); l.buf.getChannelData(0).set(m.audio); }
+    tech(); pump();
+  };
+  const pump = () => {
+    while (q.i < lines.length && lines[q.i].made) {
+      const l = lines[q.i], now = actx.currentTime; let when;
+      if (l.skip) { q.i++; continue; }
+      if (!q.on) {
+        // The first line could start now. If this device makes speech slower than it is spoken, starting now would leave
+        // long silences between lines, so the start waits until the lines still being made can keep up, to within a pause.
+        let wait = 0, P = 0; const R = new Map();
+        for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (!l2.made) { R.set(l2.by, (R.get(l2.by) || 0) + kk.rtf * est(l2)); wait = Math.max(wait, R.get(l2.by) - P); } }
+        const lead = Math.max(clamp(wait, 0, HOLD), q.prep ? clamp(q.prep + 0.45 - clock(), 0.06, 0.45) : 0.45);
+        if (!q.prep) setTimeout(() => alive() && ready(), Math.max(0, lead - 0.45) * 1000);                 // the breath before the first word
+        when = now + lead; q.on = true; q.held = lead;
+      } else when = Math.max(now + 0.06, q.end + GAP);
+      const src = actx.createBufferSource(); src.buffer = l.buf; src.connect(actx.destination); src.start(when); q.srcs.push(src);
+      l.when = when; q.end = when + l.secs; q.i++;
+    }
+    if (q.ended && q.i >= lines.length && !q.closing) { q.closing = true; setTimeout(q.done, Math.max(0, q.on ? q.end - actx.currentTime + 0.3 : 0) * 1000); }
+  };
+  return { done,
+    add(l) {
+      const i = lines.indexOf(l), by = l.by = kk.pool.reduce((a, b) => b.load < a.load ? b : a), id = ++kk.id, cost = est(l); by.load += cost;
       kk.wait[id] = m => { by.load = Math.max(0, by.load - cost); got(i, m); }; by.w.postMessage({ type: 'say', id, seq: my, text: l.text, voice });
-    });
-    setTimeout(() => alive() && !q.on && ready(), Math.max(0, kk.rtf * est(lines[0]) - 0.45) * 1000);          // the same breath, if the first line is expected about now
-  });
+      if (!q.timed) { q.timed = true; setTimeout(() => alive() && !q.on && ready(), Math.max(0, kk.rtf * cost - 0.45) * 1000); }      // the breath, if the first line is expected about now
+    },
+    end() { q.ended = true; pump(); } };
 }
 
 /* ── a borrowed voice: Claude's where the page is given one, the browser's own otherwise, none at all in the last resort ── */
@@ -342,7 +356,7 @@ const io = { sample: null, tts: null, dictation: null, voice: 'speechSynthesis' 
 function mode() { const v = $('voice').value || ''; return v.startsWith('k:') && kk.state === 'ready' && actx && actx.state !== 'closed' ? 'own' : io.tts ? 'claude' : io.voice; }
 function speak(lines, prep) {
   // resolves when every line has been heard (or stopped); a line's mouth begins as it starts
-  const m = mode(); if (m === 'own') return speakOwn(lines, prep);
+  const m = mode(); if (m === 'own') { const t = ownTalker(lines, prep); for (const l of lines) t.add(l); t.end(); return t.done; }
   prep();
   if (m === 'claude') { const v = $('voice').value || ''; return io.tts.speak(lines.map((l, i) => ({ text: l.text, id: 'l' + i })), { voice: v.startsWith('c:') ? v.slice(2) : 'airy' }); }
   if (m === 'browser') return new Promise(done => {
@@ -368,7 +382,7 @@ function mouthed(lines, from, done) {
 }
 // Whatever is being said stops, and nothing more of that reply is made.
 function hush() {
-  const q = live.q; live.seq++; live.turn = null;
+  const q = live.q; live.seq++; live.turn = null; if (live.ctl) { try { live.ctl.abort(); } catch (e) {} live.ctl = null; }
   if (q) { for (const s of q.srcs) try { s.stop(); } catch (e) {} q.done(); }
   for (const p of kk.pool) { p.load = 0; p.w.postMessage({ type: 'cancel', seq: live.seq }); }
   try { if (io.tts) io.tts.stop(); } catch (e) {} try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
@@ -389,24 +403,28 @@ $('voice').onchange = () => { io.chosen = $('voice').value; try { localStorage.s
 function note() {
   const borrowed = io.tts ? "one of Claude's voices speaks, and the lips are estimated from the spelling" : io.voice === 'browser' ? "this device's own voice speaks, and the lips are estimated from the spelling" : 'there is no voice, so the words are mouthed and shown';
   const mb = v => Math.round(v / 1e6), own = ($('voice').value || 'k:').startsWith('k:');
-  const voice = kk.state === 'ready' && own ? `The voice is made on this device, and the lips follow the times the voice model reports. This device makes a line in ${kk.rtf.toFixed(1)} times the time it takes to say it${kk.pool.length > 1 ? ', ' + kk.pool.length + ' lines at a time' : ''}${kk.rtf > 1 ? ', so there is a wait before each answer' : ''}.`
+  const voice = kk.state === 'ready' && own ? `The voice is made on this device${kk.about && kk.about.engine === 'gpu' ? ', on its GPU' : ''}, and the lips follow the times the voice model reports. This device makes a line in ${kk.rtf < 0.95 ? kk.rtf.toFixed(2) : kk.rtf.toFixed(1)} times the time it takes to say it${kk.pool.length > 1 ? ', ' + kk.pool.length + ' lines at a time' : ''}${kk.rtf > 1 ? ', so there is a wait before each answer' : ''}.`
     : kk.state === 'ready' ? `With this voice ${borrowed}.`
     : kk.state === 'loading' ? `The avatar's own voice is loading (${kk.step === 'model' && kk.of ? mb(kk.got) + ' of ' + mb(kk.of) + ' MB' : kk.step === 'starting' || kk.step === 'warming' ? 'starting the model' : 'starting'}). Until it is ready, ${borrowed}.`
     : kk.state === 'needs' ? `The avatar's own voice is not set up in this browser yet (see below). Until it is, ${borrowed}.`
     : kk.state === 'failed' ? `The avatar's own voice could not start in this view (${kk.error}). Instead ${borrowed}.` : `Here ${borrowed}.`;
   tech();
   $('how').textContent = (io.sample ? 'Replies come from Claude.' : 'Claude is not available in this view, so the avatar says back what you type.') + ' ' + voice;
-  // what the viewer is asked to add, with where to get it
-  const box = $('add'), need = kk.state === 'needs' ? kk.need : []; box.hidden = !need.length && !(kk.state === 'ready' && kk.from === 'cdn');
-  if (box.hidden) return;
-  const why = $('addWhy'), link = (href, text) => { const a = document.createElement('a'); a.href = href; a.textContent = text; a.target = '_blank'; a.rel = 'noopener'; return a; };
+  // what the viewer is asked to add, or could add, with where to get it
+  const box = $('add'), need = kk.state === 'needs' ? kk.need : [], a = kk.about, ready = kk.state === 'ready' && a;
+  const why = $('addWhy'), link = (href, text) => { const el = document.createElement('a'); el.href = href; el.textContent = text; el.target = '_blank'; el.rel = 'noopener'; return el; };
   const names = Object.keys(KNAME), parts = [];
   if (need.length) {
     parts.push("The avatar's own voice, with exact lips, needs files this page cannot carry. Download them, then choose them all here; they are kept in this browser" + (kk.kept === false ? ' only until the page is closed' : '') + ' and sent nowhere. ');
-    if (need.includes('model')) parts.push(link(HF + 'onnx/model_quantized.onnx', 'The voice model (92 MB)'), '. ');
+    if (need.includes('model')) parts.push(link(HF + 'onnx/model_quantized.onnx', 'The voice model (92 MB)'), ', or, for a computer with a GPU, ', link(HF + 'onnx/model.onnx', 'the full-precision model (326 MB)'), '. ');
     if (need.includes('voice')) { parts.push('A voice (0.5 MB each): '); names.forEach((n, i) => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), i < names.length - 1 ? ', ' : '. ')); }
     if (need.includes('wasm')) parts.push(link('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm', 'The speech runtime (15 MB)'), '. ');
-  } else { parts.push('More voices (0.5 MB each, kept in this browser): '); names.filter(n => !kk.voices.includes(n)).forEach(n => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), ' ')); if (parts.length === 1) { box.hidden = true; return; } }
+  } else if (ready && kk.from === 'cdn') {
+    if (a.engine !== 'gpu' && a.gpu === 'yes' && !a.full) parts.push('To make the voice much faster: this browser offers the page a GPU. Add ', link(HF + 'onnx/model.onnx', 'the full-precision model (326 MB)'), ' here and the voice runs on it in place of the processor. ');
+    if (a.engine !== 'gpu' && a.full) parts.push(a.gpuWhy ? `The GPU was tried and could not run the model (${a.gpuWhy}), so the processor does. ` : 'This browser offers the page no GPU, so the full-precision model runs on the processor, which is slower than the 8-bit one. ', link(HF + 'onnx/model_quantized.onnx', 'The 8-bit model (92 MB)'), ' is the one for the processor. ');
+    const more = names.filter(n => !kk.voices.includes(n)); if (more.length) { parts.push('More voices (0.5 MB each, kept in this browser): '); more.forEach(n => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), ' ')); }
+  }
+  box.hidden = !parts.length; if (box.hidden) return;
   why.textContent = ''; why.append(...parts);
 }
 // The measurements behind the sentence above, for anyone who wants to know why the voice is as fast or slow as it is.
@@ -414,30 +432,33 @@ function tech() {
   const a = kk.about, el = $('tech'); el.hidden = !(kk.state === 'ready' && a); if (el.hidden) return;
   const s = v => v.toFixed(2) + ' s', l = kk.last, ua = navigator.userAgent, engine = /Electron/.test(ua) ? 'Electron (Chromium)' : /Edg\//.test(ua) ? 'Edge (Chromium)' : /Chrome\//.test(ua) ? 'Chrome (Chromium)' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari (WebKit)' : 'unknown';
   $('techText').textContent = [
-    `Model: Kokoro 82M, 8-bit, ${Math.round(a.bytes / 1e6)} MB, run as WebAssembly on the processor; libraries from the ${kk.from === 'cdn' ? 'CDN' : 'page'}`,
+    `Model: Kokoro 82M, ${a.full ? 'full precision' : '8-bit'}, ${Math.round(a.bytes / 1e6)} MB, run ${a.engine === 'gpu' ? 'on the GPU (WebGPU)' : 'as WebAssembly on the processor'}; libraries from the ${kk.from === 'cdn' ? 'CDN' : 'page'}`,
     `Workers: ${kk.pool.length}, one line each at a time; ${kk.threads} thread${kk.threads > 1 ? 's' : ''} per worker (${a.isolated ? 'isolated page' : 'not an isolated page, so one'})`,
-    `Cores this browser reports: ${a.cores || 'not said'}; GPU offered to the page (WebGPU): ${a.gpu}`,
+    `Cores this browser reports: ${a.cores || 'not said'}; GPU offered to the page (WebGPU): ${a.gpu}${a.gpuWhy ? '; tried and given up: ' + a.gpuWhy : ''}`,
     `This worker's core: a fixed sum of thirty million square roots took ${Math.round(a.loop)} ms (58 ms on the machine the page was built on, where a line takes about 1.3 times its length to make)`,
     `Start-up test: first run ${s(a.cold)}; then ${s(a.secs)} of speech made in ${s(a.made)} (${(a.made / a.secs).toFixed(2)} times its length)`,
-    l ? `Last line made: ${s(l.secs)} of speech in ${s(l.took)} (${(l.took / l.secs).toFixed(2)} times; pronouncing ${s(l.g2p)}, the model ${s(l.took - l.g2p)}); it was ready ${s(l.at)} after the reply arrived, in a reply of ${l.n} line${l.n > 1 ? 's' : ''}` : 'Last line made: none yet',
+    l ? `Last line made: ${s(l.secs)} of speech in ${s(l.took)} (${(l.took / l.secs).toFixed(2)} times; pronouncing ${s(l.g2p)}, the model ${s(l.took - l.g2p)}); ready ${s(l.at)} after ${l.first ? 'Send' : 'Send (a later line)'}` : 'Last line made: none yet',
     `Running average shown above: ${kk.rtf.toFixed(2)}`,
+    `Files kept in this browser for next time: ${kk.kept ? 'yes' : kk.kept === false ? 'no' + (kk.keptWhy ? ' (' + kk.keptWhy + ')' : '') : 'none added here'}`,
     `Browser engine: ${engine}`,
   ].join('\n');
 }
 $('files').onchange = e => { const list = [...e.target.files]; e.target.value = ''; if (kk.add) kk.add(list); };
 /* ── the conversation ── */
 function setState(s, label) { live.state = s; const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
-function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; }
-async function reply(text) {
-  const msgs = [{ role: 'user', content: PERSONA + (slow() ? ' Keep every answer to one short sentence.' : '') }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
+function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; return t => { li.lastChild.nodeValue = t; $('log').scrollTop = 1e9; }; }
+// Asks Claude. `part` is called with the whole reply so far, a few times a second, while it is being written.
+async function reply(text, part) {
   if (!io.sample) return /[A-Za-z]{2}/.test(text) ? text : "Type a sentence and I will say it.";                 // no Claude in this view: the words typed are the words spoken
-  try { const r = await io.sample(msgs, { modelTier: 'quick', cache: false }); return (r.text || '').trim(); }
-  catch (e) { return e && e.code === 'rate_limited' ? 'I need a moment before I can answer again.' : "I couldn't get an answer just now."; }
+  const msgs = [{ role: 'user', content: PERSONA + (slow() ? ' Keep every answer to one short sentence.' : '') }, { role: 'assistant', content: 'Understood.' }].concat(live.history.slice(-12));
+  const ctl = live.ctl = new AbortController();
+  try { const r = await io.sample(msgs, { modelTier: 'quick', cache: false, signal: ctl.signal, onText: ({ text }) => part(text) }); return (r.text || '').trim(); }
+  catch (e) { return e && e.text ? e.text.trim() : e && e.code === 'rate_limited' ? 'I need a moment before I can answer again.' : e && e.code === 'cancelled' ? '' : "I couldn't get an answer just now."; }
 }
 // A reply is spoken a sentence at a time; a long sentence is cut once more at a comma, so its first words come sooner
 // (sooner still when two workers can make the halves side by side). On a device that makes speech slower than it is
 // spoken even so, Claude is asked for one sentence.
-const slow = () => mode() === 'own' && kk.rtf / kk.pool.length > 1;
+const slow = () => mode() === 'own' && kk.rtf / Math.max(1, kk.pool.length) > 1;
 function cut(answer) {
   const out = [];
   for (const s of answer.match(/[^.!?…]+[.!?…]*\s*/g) || [answer]) {
@@ -453,16 +474,26 @@ async function turn(text) {
   say('You', text); live.history.push({ role: 'user', content: text });
   if (live.idle) live.idle.mo.back.push([clock() - live.idle.start + 0.25, 0.6]);                              // a small nod: heard you
   setState('thinking', 'Thinking'); $('cap').textContent = '';
-  const answer = (await reply(text)).replace(/[*_#`]/g, '').slice(0, 600) || 'Sorry, say that again?';
-  if (my !== live.seq) return;                                                                                // something newer was asked meanwhile
-  live.history.push({ role: 'assistant', content: answer }); if (io.sample) say('Avatar', answer);
-  const lines = cut(answer);
-  if (!lines.length) { setState('idle', 'Ready'); return; }
-  lines[0].first = true; live.turn = lines; live.cur = -1;
   // just before the first sound: the smile lets go and a breath goes in, as they would
   const span = [1e9, 1e9]; let begun = false;
   const prep = () => { if (begun || my !== live.seq) return; begun = true; const ts = clock(); span[0] = ts + 0.45; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe(); setState('speaking', 'Speaking'); };
-  try { await speak(lines, prep); } catch (e) {}
+  // With its own voice the avatar starts on the first sentence while Claude is still writing the rest: each finished
+  // sentence goes to the voice as it appears. A borrowed voice needs the whole reply first.
+  const lines = [], own = mode() === 'own', tidy = s => s.replace(/[*_#`]/g, '').slice(0, 600); let used = 0, talker = null, shown = null;
+  live.turn = lines; live.cur = -1;
+  const take = (whole, last) => {
+    if (my !== live.seq) return; whole = tidy(whole);
+    if (io.sample) { if (!shown) shown = say('Avatar', whole); else shown(whole); }
+    let upto = whole.length; if (!last) { upto = used; const re = /[.!?…]+["')\]]*\s/g; re.lastIndex = used; for (let m; (m = re.exec(whole));) upto = m.index + m[0].length; }
+    if (upto <= used) return; const fresh = cut(whole.slice(used, upto)); used = upto;
+    for (const l of fresh) { if (!lines.length) l.first = true; lines.push(l); if (own) { talker = talker || ownTalker(lines, prep); talker.add(l); } }
+  };
+  const answer = tidy(await reply(text, whole => take(whole, false))) || (lines.length ? '' : 'Sorry, say that again?');
+  if (my !== live.seq) return;                                                                                // something newer was asked meanwhile
+  if (answer) take(answer, true);
+  live.history.push({ role: 'assistant', content: answer || lines.map(l => l.text).join(' ') });
+  if (!lines.length) { setState('idle', 'Ready'); return; }
+  try { if (talker) { talker.end(); await talker.done; } else await speak(lines, prep); } catch (e) {}
   if (begun) span[1] = clock(); if (my !== live.seq) return;
   finish(); live.turn = null; rest(clock()); setState('idle', 'Ready');
 }

@@ -7,13 +7,15 @@
 //   2  the viewer adds model_quantized.onnx and am_michael.bin: the voice should start, and a reply be spoken with it
 //   3  the page is loaded again: the files should still be there (kept in the browser), with nothing to add
 //   4  a browser where the CDN will not hand over the runtime's .wasm file: the page should ask for that file too
+//   5  the viewer adds the full-precision model (the one a GPU can run): the voice should start again with it, and only
+//      that model be kept. There is no GPU here, so this shows the fall-back to the processor, not the GPU itself.
 // What it cannot show is whether the real viewer's frame allows any of this (WebAssembly, the CDN, storage).
 // Run from the repository root:  node avatar/test_published.js
 const { chromium } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path');
 const V = path.join(__dirname, 'voice'), SRC = path.join(V, 'src');
 const CDN = { 'onnxruntime-web@1.31.1/dist/ort.wasm.min.mjs': ['ort.js', 'text/javascript'], 'onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.mjs': ['ort-wasm.js', 'text/javascript'],
   'onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm': ['ort-wasm.wasm', 'application/wasm'], 'phonemizer@1.2.1/dist/phonemizer.js': ['phonemizer.js', 'text/javascript'] };
-const mocks = () => { const sample = async () => { await new Promise(r => setTimeout(r, 300)); return { text: 'Maybe my mouth moves better now. Both of us will be able to tell.' }; }; window.claude = { use: async n => ({ sample })[n] || null }; };
+const mocks = () => { const sample = async (input, opts) => { const text = 'Maybe my mouth moves better now. Both of us will be able to tell.'; for (let i = 1; i <= 4; i++) { await new Promise(r => setTimeout(r, 120)); if (opts && opts.onText) opts.onText({ text: text.slice(0, Math.round(text.length * i / 4)), delta: '' }); } return { text }; }; window.claude = { use: async n => ({ sample })[n] || null }; };
 (async () => {
   const server = http.createServer((q, r) => {
     const u = q.url.split('?')[0], f = u === '/index.html' ? path.join(__dirname, 'index.html') : u === '/voice/worker.js' ? path.join(V, 'worker.js') : null;
@@ -48,6 +50,10 @@ const mocks = () => { const sample = async () => { await new Promise(r => setTim
     check(true, `2 a second voice added afterwards: ${await p.evaluate(() => [...document.getElementById('voice').options].map(o => o.textContent).join(', '))}`);
     await p.reload(); s = await settle();
     check(s.state === 'ready' && s.voices.length === 2, `3 loaded again: voice ${s.state} with nothing added, voices ${s.voices.join(' ')}`);
+    await p.setInputFiles('#files', [path.join(SRC, 'model.onnx')]); await p.waitForFunction(() => kk.state === 'loading', null, { timeout: 120000 }); s = await settle();
+    const a = await p.evaluate(() => kk.about), keys = await p.evaluate(() => new Promise(ok => { const r = indexedDB.open('avatar-voice', 1); r.onsuccess = () => { const q = r.result.transaction('f').objectStore('f').getAllKeys(); q.onsuccess = () => ok(q.result); }; }));
+    check(s.state === 'ready' && a && a.full && a.engine === 'cpu' && keys.filter(k => /\.onnx$/.test(k)).join() === 'model.onnx', `5 the full-precision model added in place of the 8-bit one: voice ${s.state}${s.error ? ' (' + s.error + ')' : ''}, run on the ${a ? a.engine : '?'} (GPU offered here: ${a ? a.gpu : '?'}); kept in the browser: ${keys.join(', ')}`);
+    console.log(`     "${s.add}"`);
     check(!errs.length, `page errors: ${errs.length ? errs.slice(0, 3).join(' | ') : 'none'}`);
     await ctx.close();
   }
