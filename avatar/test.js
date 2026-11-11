@@ -99,5 +99,23 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
     console.log(`${ok ? 'ok  ' : 'FAIL'} hands-free: one click, then questions by voice | waited while the speaker was still talking: ${held === 'listening'} | sent as "${l1[0]}" | the avatar's own words ignored: ${l1.length === 2 && l2.length === 4 && own === 'speaking'} | second question without a click: "${l2[2]}" | spoken over: state ${cutAt.s} at once, then "${l3[l3.length - 2]}" answered | button while on: "${label}" | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
     await p.close();
   }
+  { // the copied voice: a voice file is added on the page (the model's files are in the folder beside it), then a reply is spoken with it
+    const p = await b.newPage({ viewport: { width: 900, height: 1200 } }); const errs = []; p.on('pageerror', e => errs.push(e.message));
+    await p.addInitScript(`(${mocks})(${JSON.stringify(['Maybe my mouth moves better now. Both of us will be able to tell.'])}, false)`); await p.goto(origin + '/index.html');
+    await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0 && live.state === 'idle' && kk.state === 'ready', null, { timeout: 240000 });
+    const voice = path.join(__dirname, 'voice', 'src', 'pocket', 'demo.pvoice');
+    if (!fs.existsSync(voice)) console.log('skip copied voice: no test voice file (gen/pocket.py voice makes one)');
+    else {
+      await p.setInputFiles('#files', [voice]); await p.waitForFunction(() => pk.state === 'ready' || pk.state === 'failed' || pk.state === 'needs', null, { timeout: 240000 });
+      const st = await p.evaluate(() => ({ state: pk.state, error: pk.error, need: pk.need, picked: document.getElementById('voice').value, rtf: pk.rtf, workers: pk.pool.length }));
+      await p.fill('#say', 'Is it better?'); await p.click('#send'); const modes = new Set(); let open = 0, shut = 0, n = 0;
+      for (let i = 0; i < 2400; i++) { const r = await p.evaluate(() => ({ s: live.state, m: mode(), o: live.beat ? speechAt(live.beat, PRE + planned(), WHO).o : 0 })); if (r.s === 'speaking') { modes.add(r.m); n++; if (r.o > 0.2) open++; if (r.o < -0.05) shut++; } if (i > 60 && r.s === 'idle') break; await p.waitForTimeout(25); }
+      const tech = await p.evaluate(() => document.getElementById('techText').textContent.split('\n').slice(0, 1).join(''));
+      const ok = st.state === 'ready' && st.picked === 'p:demo' && modes.has('own') && modes.size === 1 && open > 5 && shut > 0 && !errs.length; if (!ok) failed++;
+      console.log(`${ok ? 'ok  ' : 'FAIL'} copied voice: ${st.state}${st.error ? ' (' + st.error + ')' : ''}${st.need && st.need.length ? ' needs ' + st.need : ''}, chosen ${st.picked}, a line in ${st.rtf.toFixed(2)} x its length | reply spoken with: ${[...modes].join(', ') || 'nothing'}; mouth open in ${open} and pressed shut in ${shut} of ${n} samples | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
+      console.log(`     "${tech}"`);
+    }
+    await p.close();
+  }
   await b.close(); server.close(); process.exit(failed ? 1 : 0);
 })();

@@ -20,13 +20,16 @@ GENERATED = dict(persona="You are an AI, friendly and quick. Your face is one AI
 FACES = dict(
     paige=dict(voice="af_heart", **GENERATED), sunny=dict(voice="af_bella", **GENERATED), cy=dict(voice="am_michael", **GENERATED), dee=dict(voice="am_puck", **GENERATED), mel=dict(voice="am_fenrir", **GENERATED),
     me=dict(voice="am_michael",
-            persona="You are an AI, friendly and quick. Your face is animated from one photograph of the person who built this page, used with their permission, and your voice is a stock synthetic voice, not theirs. You are not that person, you do not speak for them and you know nothing about them; if asked, say so plainly.",
-            note="A proof of concept. The face is animated from one photograph of this page's owner. The voice is a stock synthetic voice, not theirs, and the one answering is an AI, not them. Nothing you say is kept by this page."),
+            persona="You are an AI, friendly and quick. Your face is animated from one photograph of the person who built this page and your voice may be a synthetic copy of theirs, both used with their permission. You are not that person, you do not speak for them and you know nothing about them; if asked, say so plainly.",
+            note="A proof of concept. The face is animated from one photograph of this page's owner, and the voice, where the page says it is copied, from a short recording of them. The one answering is an AI, not them. Nothing you say is kept by this page."),
 )
 face = f"{d}/faces/{who}.json"; extra = ""
 if os.path.exists(face):
     F = json.load(open(face)); cast = F["cast"]
     extra = f"STYLE[{json.dumps(who)}] = {json.dumps(F.get('style', 1))}; BODY[{json.dumps(who)}] = {json.dumps(F.get('body', dict(sway=0.75, hz=4, damp=0.5, hair=0)))};\n"
+    # a voice copied from that person's recording (gen/pocket.py voice), if there is one: built in, like the face
+    pv = f"{d}/faces/{who}.pvoice"
+    if os.path.exists(pv): FACES[who] = dict(FACES[who], pvoice=__import__("base64").b64encode(open(pv, "rb").read()).decode())
 else: cast = json.load(open(f"{root}/assets.json"))["cast"][who]
 news = open(f"{root}/src/news.js", encoding="utf-8").read()
 for old, new in (("/*ASSETS*/{ img: {}, cast: {} }", json.dumps({"img": {}, "cast": {who: cast}})), ("buildShow(SPEECH);\n", "")):

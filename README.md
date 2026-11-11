@@ -102,6 +102,7 @@ docs/                 the written account
 | [`docs/17-live-avatar-poc.md`](docs/17-live-avatar-poc.md) | A proof of concept that talks back: Claude's reply and voice, lips guessed from the words and kept in step with the voice |
 | [`docs/18-own-voice-and-a-real-face.md`](docs/18-own-voice-and-a-real-face.md) | The avatar's own voice, run in the browser, with lips timed by the voice model; a face made from a photograph |
 | [`docs/19-rebuild-recipe.md`](docs/19-rebuild-recipe.md) | A second one-pager: the recipe as a skill file, for someone else's agent to rebuild the video from |
+| [`docs/21-a-copied-voice.md`](docs/21-a-copied-voice.md) | The avatar in a voice copied from a short recording, with a small recogniser timing the sounds in the page |
 | [`docs/20-faster-voice-and-streaming.md`](docs/20-faster-voice-and-streaming.md) | Why the avatar's voice was slow on a fast laptop, running it on a GPU, and speaking while the reply is still being written |
 
 ## Known limits

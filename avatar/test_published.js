@@ -1,6 +1,6 @@
 // test_published.js : the page as a Claude artifact holds it, in a headless browser.
 //
-// A published page carries only index.html and voice/worker.js. The two libraries then come from the jsDelivr CDN and
+// A published page carries only index.html and three scripts of its own (voice/worker.js, speech.js, pocket.js). The two libraries then come from the jsDelivr CDN and
 // the model and voices are files the viewer adds. This test serves exactly those two files, answers the CDN's addresses
 // from the copies in avatar/voice/ (the test machine has no route to the CDN), and walks through it:
 //   1  first visit: the page should say what it needs (model, voice) and speak with a borrowed voice meanwhile
@@ -23,7 +23,7 @@ const mocks = () => { const sample = async (input, opts) => { const text = 'Mayb
 (async () => {
   const server = http.createServer((q, r) => {
     let u = q.url.split('?')[0]; const fake = u.startsWith('/fakegpu/'); if (fake) u = u.slice(8);
-    const f = u === '/index.html' ? path.join(__dirname, 'index.html') : u === '/voice/worker.js' ? path.join(V, 'worker.js') : null;
+    const f = u === '/index.html' ? path.join(__dirname, 'index.html') : /^\/voice\/(worker|speech|pocket)\.js$/.test(u) ? path.join(V, u.slice(7)) : null;      // the four files a published page has
     if (!f) { r.writeHead(404); return r.end(); }
     // 6: a worker that is told a GPU is on offer when none is, to run the GPU branch as far as it goes without one
     if (fake && u === '/voice/worker.js') { r.writeHead(200, { 'content-type': 'text/javascript' }); return r.end("Object.defineProperty(self.navigator, 'gpu', { value: { requestAdapter: async () => ({ pretend: true }) }, configurable: true });\n" + fs.readFileSync(f, 'utf8')); }

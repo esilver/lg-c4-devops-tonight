@@ -80,7 +80,7 @@
   <details id="tech" hidden><summary>Voice details</summary><pre id="techText"></pre></details>
   <div id="add" hidden>
     <p class="note" id="addWhy"></p>
-    <label class="pick">Add the files <input id="files" type="file" multiple accept=".onnx,.bin,.wasm"></label>
+    <label class="pick">Add the files <input id="files" type="file" multiple accept=".onnx,.bin,.wasm,.model,.pvoice"></label>
   </div>
   <ol id="log" aria-label="Conversation"></ol>
   <p class="note" id="note"></p>
@@ -944,13 +944,27 @@ const store = {
     for (const k of Object.keys(out)) if (out[k] instanceof Blob) out[k] = await out[k].arrayBuffer(); return out; },
   put: async (k, v) => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'); t.objectStore('f').put(new Blob([v]), k); t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error || new Error('not stored')); }); },
   // one model at a time is kept: a new one replaces the old
-  drop: async keep => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'), o = t.objectStore('f'), r = o.getAllKeys(); r.onsuccess = () => { for (const k of r.result) if (/\.onnx$/i.test(k) && k !== keep) o.delete(k); }; t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
+  drop: async keep => { const db = await store.open(); return new Promise((ok, no) => { const t = db.transaction('f', 'readwrite'), o = t.objectStore('f'), r = o.getAllKeys(); r.onsuccess = () => { for (const k of r.result) if (/\.onnx$/i.test(k) && !pfile(k) && k !== keep) o.delete(k); }; t.oncomplete = () => ok(); t.onerror = t.onabort = () => no(t.error); }); },
 };
-// a file the viewer chose, by what its name ends in: the model, the runtime's WebAssembly, or a voice
+// A voice copied from a recording (Pocket TTS, voice/pocket.js). It needs its own model, in four files and a tokenizer,
+// and a small recogniser that times the sounds, since this model does not say when they happen. `pv` holds the voices:
+// each is the recording as the model's audio encoder wrote it down (made beforehand; built into this page or added).
+const pk = { state: 'off', gen: 0, pool: [], rtf: 1.6, cps: 15, step: '', got: 0, of: 0, error: '', wait: {}, id: 0, voices: [], threads: 1, need: [], files: {}, pv: {}, about: null, last: null, from: '' };
+const HFP = 'https://huggingface.co/KevinAHM/pocket-tts-onnx/resolve/58a6d00cf13d239b6748cb0769f35c580a8f606c/onnx/english_2026-04/', HFZ = 'https://huggingface.co/anyspeech/zipa-small-crctc-500k/resolve/dfe87c97662606fa6db90ad06f627d4363314744/';
+const PNEED = { lm: [HFP + 'flow_lm_main_int8.onnx', 'the language model (76 MB)'], flow: [HFP + 'flow_lm_flow_int8.onnx', 'the flow network (10 MB)'], dec: [HFP + 'mimi_decoder_int8.onnx', 'the audio decoder (23 MB)'],
+  txt: [HFP + 'text_conditioner.onnx', 'the text conditioner (16 MB)'], tok: [HFP + 'tokenizer.model', 'the tokenizer'], zipa: [HFZ + 'model.int8.onnx', 'the recogniser that times the sounds (71 MB)'] };
+const pfile = n => /^flow_lm_main/i.test(n) ? 'lm' : /^flow_lm_flow/i.test(n) ? 'flow' : /^mimi_decoder/i.test(n) ? 'dec' : /^text_conditioner/i.test(n) ? 'txt' : /^tokenizer.*\.model$/i.test(n) ? 'tok' : /^(model\.int8|zipa)[^\\/]*\.onnx$/i.test(n) ? 'zipa' : '';
+const eng = () => (($('voice').value || '').startsWith('p:') ? pk : kk);      // the engine of the voice that is chosen
+// A file the viewer chose, by its name: part of the copied voice, a copied voice itself, the other voice's model, the
+// runtime's WebAssembly, or one of the other voice's voices. Says which it was ('' if none).
 function take(name, buf) {
   const f = kk.files; name = name.replace(/^.*[\\/]/, '');
-  if (/\.onnx$/i.test(name)) f.model = buf; else if (/\.wasm$/i.test(name) && /jspi|asyncify/i.test(name)) f.gpuWasm = { kind: /jspi/i.test(name) ? 'jspi' : 'asyncify', buf }; else if (/\.wasm$/i.test(name)) f.wasm = buf; else if (/\.bin$/i.test(name) && buf.byteLength % 1024 === 0 && buf.byteLength < 4e6) f.voices[name.replace(/( \(\d+\))?\.bin$/i, '')] = buf; else return false;
-  return true;
+  if (pfile(name)) { pk.files[pfile(name)] = buf; return 'copied'; }
+  if (/\.pvoice$/i.test(name) && buf.byteLength % 4096 === 0) { pk.pv[name.replace(/( \(\d+\))?\.pvoice$/i, '')] = buf; return 'copied'; }
+  if (/\.onnx$/i.test(name)) { f.model = buf; return 'model'; }
+  if (/\.wasm$/i.test(name)) { if (/jspi|asyncify/i.test(name)) f.gpuWasm = { kind: /jspi/i.test(name) ? 'jspi' : 'asyncify', buf }; else f.wasm = buf; return 'runtime'; }
+  if (/\.bin$/i.test(name) && buf.byteLength % 1024 === 0 && buf.byteLength < 4e6) { f.voices[name.replace(/( \(\d+\))?\.bin$/i, '')] = buf; return 'voice'; }
+  return '';
 }
 function ownVoice() {
   const base = new URL('voice/', document.baseURI).href; kk.state = 'loading'; note();
@@ -986,15 +1000,17 @@ function ownVoice() {
   // The model was handed to the workers, so unless a new one was just added it is read back from the browser's store.
   const boot = async () => { for (const p of kk.pool) try { p.w.terminate(); } catch (e) {} try { if (kk.first) kk.first.terminate(); } catch (e) {}
     const gen = ++kk.gen; kk.pool = []; kk.wait = {}; kk.first = null; kk.alive = false; kk.about = null; kk.last = null; kk.voices = []; kk.state = 'loading'; kk.step = 'starting'; voiceList(); note();
-    if (!kk.files.model) try { const f = await store.all(); for (const [k, v] of Object.entries(f)) if (/\.onnx$/i.test(k)) take(k, v); } catch (e) {}
+    if (!kk.files.model) try { const f = await store.all(); for (const [k, v] of Object.entries(f)) if (/\.onnx$/i.test(k) && !pfile(k)) take(k, v); } catch (e) {}
     if (gen !== kk.gen) return;
     try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } };
   // Files the viewer adds are kept for next time. A model starts the voice (again); a voice is passed round the workers.
   kk.add = async list => {
-    let model = false, any = false;
-    for (const file of list) { const name = file.name.replace(/^.*[\\/]/, ''), buf = await file.arrayBuffer(); if (!take(name, buf)) continue; any = true; const isModel = /\.onnx$/i.test(name); model = model || isModel || /\.wasm$/i.test(name);      // a runtime file also means starting again
-      try { await store.put(name, buf); if (isModel) await store.drop(name); kk.kept = true; } catch (e) { kk.kept = false; kk.keptWhy = String(e && e.message || e).slice(0, 100); } }
-    if (!any) return;
+    let model = false, own = false, copied = false;
+    for (const file of list) { const name = file.name.replace(/^.*[\\/]/, ''), buf = await file.arrayBuffer(), kind = take(name, buf); if (!kind) continue;
+      if (kind === 'copied') copied = true; else own = true; model = model || kind === 'model' || kind === 'runtime';
+      try { await store.put(name, buf); if (kind === 'model') await store.drop(name); kk.kept = true; } catch (e) { kk.kept = false; kk.keptWhy = String(e && e.message || e).slice(0, 100); } }
+    if (copied && pk.boot) { hush(); if (live.beat) { finish(); rest(clock()); setState('idle', 'Ready'); } pk.boot(); }
+    if (!own) return;
     if (kk.state === 'needs' && kk.first) { kk.state = 'loading'; kk.step = 'starting'; note(); init(kk.first, mine()); }
     else if (model || kk.state === 'failed') { hush(); if (live.beat) { finish(); rest(clock()); setState('idle', 'Ready'); } boot(); }
     else if (kk.state === 'ready') { spread(); voiceList(); note(); }
@@ -1002,8 +1018,40 @@ function ownVoice() {
   // a voice added while the model was starting, or after: every worker gets it
   const spread = () => { for (const [k, v] of Object.entries(kk.files.voices)) if (!kk.voices.includes(k)) { kk.voices.push(k); for (const p of kk.pool) p.w.postMessage({ type: 'voice', name: k, data: new Float32Array(v.slice(0)) }); } };
   store.all().then(f => { for (const [k, v] of Object.entries(f)) take(k, v); kk.kept = true; }, () => { kk.kept = false; })
-    .then(() => { try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } });
+    .then(() => { try { wire(fresh(), true, mine()); } catch (e) { viaBlob(); } copiedVoice(); });
 }
+// The copied voice starts if there is a voice to speak in. Its worker says which files are missing; once they are all
+// there it starts, and a second worker is started beside it where the device has the cores.
+function copiedVoice() {
+  const base = new URL('voice/', document.baseURI).href, published = /(^|\.)claudeusercontent\.com$/.test(location.hostname);
+  if (FACE.pvoice && !pk.pv.me) { const b = atob(FACE.pvoice), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); pk.pv.me = u.buffer; }
+  const lost = why => { pk.state = 'failed'; pk.error = why; voiceList(); note(); };
+  const want = () => clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, 2), 1, 2);
+  const init = w => { const m = { type: 'init', base, folder: !published, voice: Object.keys(pk.pv)[0], files: {}, voices: {} };
+    for (const [k, v] of Object.entries(pk.files)) m.files[k] = v.slice(0); if (kk.files.wasm) m.wasm = kk.files.wasm.slice(0);
+    for (const [k, v] of Object.entries(pk.pv)) m.voices[k] = new Float32Array(v.slice(0));
+    w.postMessage(m); };
+  const wire = (w, first) => { const gen = pk.gen; if (first) pk.first = w;
+    w.onmessage = e => { const m = e.data; if (gen !== pk.gen) return;
+      if (m.type === 'progress') { if (first) { pk.step = m.step; pk.got = m.got || 0; pk.of = m.of || 0; note(); } }
+      else if (m.type === 'need') { if (first) { pk.state = 'needs'; pk.need = m.what; note(); } }
+      else if (m.type === 'ready') { pk.pool.push({ w, load: 0 });
+        if (first) { pk.state = 'ready'; pk.rtf = m.rtf; pk.threads = m.threads; pk.voices = m.voices; pk.from = m.from; pk.about = m.about; voiceList(); }
+        if (pk.pool.length < want() && pk.state === 'ready') start(false); else if (kk.kept) pk.files = {};      // the files are in the browser's store; no need to hold them here too
+        note(); }
+      else if (m.id != null && pk.wait[m.id]) { const f = pk.wait[m.id]; delete pk.wait[m.id]; f(m); }
+      else if (m.type === 'error' && m.id == null && first) lost(m.message); };
+    w.onerror = e => { if (e && e.preventDefault) e.preventDefault(); if (gen === pk.gen && first) lost((e && e.message) || 'the worker stopped'); };
+    init(w); };
+  const start = first => { try { wire(new Worker(base + 'pocket.js', { type: 'module' }), first); } catch (e) { if (first) lost(String(e && e.message || e)); } };
+  pk.boot = async () => { for (const p of pk.pool) try { p.w.terminate(); } catch (e) {} try { if (pk.first) pk.first.terminate(); } catch (e) {}
+    const gen = ++pk.gen; pk.pool = []; pk.wait = {}; pk.first = null; pk.about = null; pk.last = null; pk.voices = []; if (!Object.keys(pk.pv).length) { pk.state = 'off'; voiceList(); note(); return; }
+    pk.state = 'loading'; pk.step = 'starting'; voiceList(); note();
+    if (Object.keys(PNEED).some(k => !pk.files[k])) try { const f = await store.all(); for (const [k, v] of Object.entries(f)) if (pfile(k) && !pk.files[pfile(k)]) take(k, v); } catch (e) {}
+    if (gen === pk.gen) start(true); };
+  if (Object.keys(pk.pv).length) { pk.state = 'loading'; note(); start(true); }
+}
+
 // Sound may only start inside a tap. iPhones also mute a page's sound with the ringer switch unless the page asks for a
 // playback session or keeps a silent <audio> element going (docs/14); neither does anything elsewhere.
 function sound() {
@@ -1027,14 +1075,14 @@ function sound() {
 // moment comes. `done` resolves when the last line has played (after end() says there are no more).
 function ownTalker(lines, prep) {
   let settle; const done = new Promise(r => { settle = r; });
-  const my = live.seq, voice = $('voice').value.slice(2);
+  const my = live.seq, voice = $('voice').value.slice(2), E = eng();
   const q = live.q = { lines, i: 0, end: 0, srcs: [], on: false, prep: 0, t0: wall(), ended: false, timed: false, done: () => { if (q.over) return; q.over = true; if (live.q === q) live.q = null; settle(); } };
-  const est = l => l.secs || l.text.length / kk.cps, alive = () => my === live.seq && live.turn === lines && !q.over;
+  const est = l => l.secs || l.text.length / E.cps, alive = () => my === live.seq && live.turn === lines && !q.over;
   const ready = () => { if (!q.prep) { q.prep = clock(); prep(); } };
   const got = (i, m) => {
     if (!alive()) return; const l = lines[i]; l.made = true;
-    if (m.type !== 'said' || m.empty) { l.skip = true; if (m.type === 'error') { kk.state = 'failed'; kk.error = m.message; voiceList(); note(); } }
-    else { kk.last = { took: m.took, g2p: m.g2p, secs: m.secs, at: wall() - q.t0, first: i === 0 }; kk.rtf = clamp(0.5 * kk.rtf + 0.5 * m.took / m.secs, 0.02, 20); kk.cps = clamp(0.7 * kk.cps + 0.3 * l.text.length / m.secs, 8, 25); l.sp = m.sp; l.secs = m.secs; l.buf = actx.createBuffer(1, m.audio.length, 24000); l.buf.getChannelData(0).set(m.audio); }
+    if (m.type !== 'said' || m.empty) { l.skip = true; if (m.type === 'error') { E.state = 'failed'; E.error = m.message; voiceList(); note(); } }
+    else { E.last = { took: m.took, g2p: m.g2p, secs: m.secs, at: wall() - q.t0, first: i === 0, parts: m.parts }; E.rtf = clamp(0.5 * E.rtf + 0.5 * m.took / m.secs, 0.02, 20); E.cps = clamp(0.7 * E.cps + 0.3 * l.text.length / m.secs, 8, 25); l.sp = m.sp; l.secs = m.secs; l.buf = actx.createBuffer(1, m.audio.length, 24000); l.buf.getChannelData(0).set(m.audio); }
     tech(); pump();
   };
   const pump = () => {
@@ -1045,7 +1093,7 @@ function ownTalker(lines, prep) {
         // The first line could start now. If this device makes speech slower than it is spoken, starting now would leave
         // long silences between lines, so the start waits until the lines still being made can keep up, to within a pause.
         let wait = 0, P = 0; const R = new Map();
-        for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (!l2.made) { R.set(l2.by, (R.get(l2.by) || 0) + kk.rtf * est(l2)); wait = Math.max(wait, R.get(l2.by) - P); } }
+        for (let k = q.i + 1; k < lines.length; k++) { const l2 = lines[k]; P += est(lines[k - 1]) + GAP + SLACK; if (!l2.made) { R.set(l2.by, (R.get(l2.by) || 0) + E.rtf * est(l2)); wait = Math.max(wait, R.get(l2.by) - P); } }
         const lead = Math.max(clamp(wait, 0, HOLD), q.prep ? clamp(q.prep + 0.45 - clock(), 0.06, 0.45) : 0.45);
         if (!q.prep) setTimeout(() => alive() && ready(), Math.max(0, lead - 0.45) * 1000);                 // the breath before the first word
         when = now + lead; q.on = true; q.held = lead;
@@ -1057,9 +1105,9 @@ function ownTalker(lines, prep) {
   };
   return { done,
     add(l) {
-      const i = lines.indexOf(l), by = l.by = kk.pool.reduce((a, b) => b.load < a.load ? b : a), id = ++kk.id, cost = est(l); by.load += cost;
-      kk.wait[id] = m => { by.load = Math.max(0, by.load - cost); got(i, m); }; by.w.postMessage({ type: 'say', id, seq: my, text: l.text, voice });
-      if (!q.timed) { q.timed = true; setTimeout(() => alive() && !q.on && ready(), Math.max(0, kk.rtf * cost - 0.45) * 1000); }      // the breath, if the first line is expected about now
+      const i = lines.indexOf(l), by = l.by = E.pool.reduce((a, b) => b.load < a.load ? b : a), id = ++E.id, cost = est(l); by.load += cost;
+      E.wait[id] = m => { by.load = Math.max(0, by.load - cost); got(i, m); }; by.w.postMessage({ type: 'say', id, seq: my, text: l.text, voice });
+      if (!q.timed) { q.timed = true; setTimeout(() => alive() && !q.on && ready(), Math.max(0, E.rtf * cost - 0.45) * 1000); }      // the breath, if the first line is expected about now
     },
     end() { q.ended = true; pump(); } };
 }
@@ -1070,7 +1118,7 @@ const PAUSE = 0.9;                             // seconds of silence after which
 const CUT = new Set('stop wait pause hey quiet enough okay ok hold excuse sorry shh'.split(' '));      // one of these alone is enough to interrupt
 // which voice speaks the next reply
 // (the audio clock may still be waking from the tap that sent the message; whatever is scheduled on it plays once it has)
-function mode() { const v = $('voice').value || ''; return v.startsWith('k:') && kk.state === 'ready' && actx && actx.state !== 'closed' ? 'own' : io.tts ? 'claude' : io.voice; }
+function mode() { const v = $('voice').value || ''; return (v.startsWith('k:') || v.startsWith('p:')) && eng().state === 'ready' && actx && actx.state !== 'closed' ? 'own' : io.tts ? 'claude' : io.voice; }
 function speak(lines, prep) {
   // resolves when every line has been heard (or stopped); a line's mouth begins as it starts
   const m = mode(); if (m === 'own') { const t = ownTalker(lines, prep); for (const l of lines) t.add(l); t.end(); return t.done; }
@@ -1101,7 +1149,7 @@ function mouthed(lines, from, done) {
 function hush() {
   const q = live.q; live.seq++; live.turn = null; if (live.ctl) { try { live.ctl.abort(); } catch (e) {} live.ctl = null; }
   if (q) { for (const s of q.srcs) try { s.stop(); } catch (e) {} q.done(); }
-  for (const p of kk.pool) { p.load = 0; p.w.postMessage({ type: 'cancel', seq: live.seq }); }
+  for (const p of kk.pool.concat(pk.pool)) { p.load = 0; p.w.postMessage({ type: 'cancel', seq: live.seq }); }
   try { if (io.tts) io.tts.stop(); } catch (e) {} try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
 }
 
@@ -1111,27 +1159,38 @@ function voiceList() {
   const sel = $('voice'); let kept = ''; try { kept = localStorage.getItem('avatar-voice') || ''; } catch (e) {}
   sel.textContent = '';
   const group = (label, items) => { if (!items.length) return; const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of items) { const o = document.createElement('option'); o.value = v; o.textContent = t; g.append(o); } sel.append(g); };
+  group('Copied from a recording: lips timed by a recogniser', pk.state === 'ready' ? pk.voices.map(v => ['p:' + v, v === 'me' ? 'Your voice' : v]) : []);
   group('Made on this device: lips exact', kk.state === 'ready' ? kk.voices.map(v => ['k:' + v, KNAME[v] || v]) : []);
   group("Claude's voices: lips estimated", io.tts ? ['airy', 'buttery', 'glassy', 'rounded'].map(v => ['c:' + v, v[0].toUpperCase() + v.slice(1)]) : []);
   $('voiceRow').hidden = !sel.options.length;
-  const want = [io.chosen, kept, 'k:' + FACE.voice].find(v => v && [...sel.options].some(o => o.value === v)); if (want) sel.value = want;
+  const want = [io.chosen, kept, pk.state === 'ready' && 'p:' + pk.voices[0], 'k:' + FACE.voice].find(v => v && [...sel.options].some(o => o.value === v)); if (want) sel.value = want;
 }
 $('voice').onchange = () => { io.chosen = $('voice').value; try { localStorage.setItem('avatar-voice', io.chosen); } catch (e) {} note(); };
 function note() {
   const borrowed = io.tts ? "one of Claude's voices speaks, and the lips are estimated from the spelling" : io.voice === 'browser' ? "this device's own voice speaks, and the lips are estimated from the spelling" : 'there is no voice, so the words are mouthed and shown';
-  const mb = v => Math.round(v / 1e6), own = ($('voice').value || 'k:').startsWith('k:');
-  const voice = kk.state === 'ready' && own ? `The voice is made on this device${kk.about && kk.about.engine === 'gpu' ? ', on its GPU' : ''}, and the lips follow the times the voice model reports. This device makes a line in ${kk.rtf < 0.95 ? kk.rtf.toFixed(2) : kk.rtf.toFixed(1)} times the time it takes to say it${kk.pool.length > 1 ? ', ' + kk.pool.length + ' lines at a time' : ''}${kk.rtf > 1 ? ', so there is a wait before each answer' : ''}.`
-    : kk.state === 'ready' ? `With this voice ${borrowed}.`
-    : kk.state === 'loading' ? `The avatar's own voice is loading (${kk.step === 'model' && kk.of ? mb(kk.got) + ' of ' + mb(kk.of) + ' MB' : kk.step === 'starting' || kk.step === 'warming' ? 'starting the model' : 'starting'}). Until it is ready, ${borrowed}.`
-    : kk.state === 'needs' ? `The avatar's own voice is not set up in this browser yet (see below). Until it is, ${borrowed}.`
-    : kk.state === 'failed' ? `The avatar's own voice could not start in this view (${kk.error}). Instead ${borrowed}.` : `Here ${borrowed}.`;
+  const mb = v => Math.round(v / 1e6), sel = $('voice').value || '', E = sel.startsWith('p:') ? pk : sel.startsWith('k:') ? kk : null;
+  const pace = e => `This device makes a line in ${e.rtf < 0.95 ? e.rtf.toFixed(2) : e.rtf.toFixed(1)} times the time it takes to say it${e.pool.length > 1 ? ', ' + e.pool.length + ' lines at a time' : ''}${e.rtf > 1 ? ', so there is a wait before each answer' : ''}.`;
+  let voice;
+  if (E === pk && pk.state === 'ready') voice = `The voice is copied from a recording and made on this device; a small recogniser then listens to each line and times every sound for the lips. ${pace(pk)}`;
+  else if (E === kk && kk.state === 'ready') voice = `The voice is made on this device${kk.about && kk.about.engine === 'gpu' ? ', on its GPU' : ''}, and the lips follow the times the voice model reports. ${pace(kk)}`;
+  else if (sel.startsWith('c:') && (kk.state === 'ready' || pk.state === 'ready')) voice = `With this voice ${borrowed}.`;
+  else { const lead = pk.state !== 'off' && pk.state !== 'ready' ? pk : kk, what = lead === pk ? 'The copied voice' : "The avatar's own voice";
+    voice = lead.state === 'loading' ? `${what} is loading (${lead === kk && kk.step === 'model' && kk.of ? mb(kk.got) + ' of ' + mb(kk.of) + ' MB' : lead === pk && pk.step === 'model' ? 'file ' + (pk.got + 1) + ' of ' + pk.of : lead.step === 'starting' || lead.step === 'warming' ? 'starting the model' : 'starting'}). Until it is ready, ${borrowed}.`
+      : lead.state === 'needs' ? `${what} is not set up in this browser yet (see below). Until it is, ${borrowed}.`
+      : lead.state === 'failed' ? `${what} could not start in this view (${lead.error}). Instead ${borrowed}.` : `Here ${borrowed}.`; }
   tech();
   $('how').textContent = (io.sample ? 'Replies come from Claude.' : 'Claude is not available in this view, so the avatar says back what you type.') + ' ' + voice;
   // what the viewer is asked to add, or could add, with where to get it
   const box = $('add'), need = kk.state === 'needs' ? kk.need : [], a = kk.about, ready = kk.state === 'ready' && a;
   const why = $('addWhy'), link = (href, text) => { const el = document.createElement('a'); el.href = href; el.textContent = text; el.target = '_blank'; el.rel = 'noopener'; return el; };
   const names = Object.keys(KNAME), parts = [];
-  if (need.length) {
+  if (pk.state === 'needs') {                             // the copied voice comes first: it is the one this page was given a voice for
+    const miss = pk.need.filter(k => PNEED[k]);
+    parts.push('To speak in the copied voice, the page needs files it cannot carry (about 200 MB in all). Download them, then choose them all here; they are kept in this browser' + (kk.kept === false ? ' only until the page is closed' : '') + ' and sent nowhere. The voice model: ');
+    miss.forEach((k, i) => parts.push(link(PNEED[k][0], PNEED[k][1]), i < miss.length - 1 ? ', ' : '. '));
+    if (pk.need.includes('wasm')) parts.push(link('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm', 'The speech runtime (15 MB)'), '. ');
+    if (pk.need.includes('voice')) parts.push('And a voice file made from a recording (.pvoice). ');
+  } else if (need.length) {
     parts.push("The avatar's own voice, with exact lips, needs files this page cannot carry. Download them, then choose them all here; they are kept in this browser" + (kk.kept === false ? ' only until the page is closed' : '') + ' and sent nowhere. ');
     if (need.includes('model')) parts.push(link(HF + 'onnx/model_quantized.onnx', 'The voice model (92 MB)'), ', or, for a computer with a GPU, ', link(HF + 'onnx/model.onnx', 'the full-precision model (326 MB)'), '. ');
     if (need.includes('voice')) { parts.push('A voice (0.5 MB each): '); names.forEach((n, i) => parts.push(link(HF + 'voices/' + n + '.bin', KNAME[n]), i < names.length - 1 ? ', ' : '. ')); }
@@ -1147,7 +1206,18 @@ function note() {
 }
 // The measurements behind the sentence above, for anyone who wants to know why the voice is as fast or slow as it is.
 function tech() {
-  const a = kk.about, el = $('tech'); el.hidden = !(kk.state === 'ready' && a); if (el.hidden) return;
+  const el = $('tech'), sel0 = $('voice').value || '';
+  if (sel0.startsWith('p:') && pk.state === 'ready' && pk.about) { const a = pk.about, s = v => v.toFixed(2) + ' s', l = pk.last, q = a.parts; el.hidden = false;
+    $('techText').textContent = [
+      `Voice: copied from a recording by Pocket TTS (100M, 8-bit), run as WebAssembly on the processor; sounds timed by ZIPA small (8-bit); libraries from the ${pk.from === 'cdn' ? 'CDN' : 'page'}`,
+      `Workers: ${pk.pool.length}, one line each at a time; ${pk.threads} thread${pk.threads > 1 ? 's' : ''} per worker (${a.isolated ? 'isolated page' : 'not an isolated page, so one'}); cores this browser reports: ${a.cores || 'not said'}`,
+      `This worker's core: a fixed sum of thirty million square roots took ${Math.round(a.loop)} ms (58 ms on the machine the page was built on, where a line takes about 1.6 times its length to make)`,
+      `Start-up test: the voice taken in ${s(a.primed)}; first run ${s(a.cold)}; then ${s(a.secs)} of speech made in ${s(a.made)} (${(a.made / a.secs).toFixed(2)} times its length: the words ${s(q.text)}, the voice ${s(q.voice)}, the audio ${s(q.audio)})`,
+      l ? `Last line made: ${s(l.secs)} of speech in ${s(l.took)} (${(l.took / l.secs).toFixed(2)} times; pronouncing ${s(l.g2p)}, the words ${s(l.parts.text)}, the voice ${s(l.parts.voice)}, the audio ${s(l.parts.audio)}, timing the sounds ${s(l.parts.timing)}); ready ${s(l.at)} after ${l.first ? 'Send' : 'Send (a later line)'}` : 'Last line made: none yet',
+      `Running average shown above: ${pk.rtf.toFixed(2)}`,
+      `Files kept in this browser for next time: ${kk.kept ? 'yes' : kk.kept === false ? 'no' + (kk.keptWhy ? ' (' + kk.keptWhy + ')' : '') : 'none added here'}`,
+    ].join('\n'); return; }
+  const a = kk.about; el.hidden = !(kk.state === 'ready' && a); if (el.hidden) return;
   const s = v => v.toFixed(2) + ' s', l = kk.last, ua = navigator.userAgent, engine = /Electron/.test(ua) ? 'Electron (Chromium)' : /Edg\//.test(ua) ? 'Edge (Chromium)' : /Chrome\//.test(ua) ? 'Chrome (Chromium)' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari (WebKit)' : 'unknown';
   $('techText').textContent = [
     `Model: Kokoro 82M, ${a.full ? 'full precision' : '8-bit'}, ${Math.round(a.bytes / 1e6)} MB, run ${a.engine === 'gpu' ? 'on the GPU (WebGPU, ' + a.gpuKind + ' build)' : 'as WebAssembly on the processor'}; libraries from the ${kk.from === 'cdn' ? 'CDN' : 'page'}`,
@@ -1179,11 +1249,11 @@ async function reply(text, part) {
 // A reply is spoken a sentence at a time; a long sentence is cut once more at a comma, so its first words come sooner
 // (sooner still when two workers can make the halves side by side). On a device that makes speech slower than it is
 // spoken even so, Claude is asked for one sentence.
-const slow = () => mode() === 'own' && kk.rtf / Math.max(1, kk.pool.length) > 1;
+const slow = () => mode() === 'own' && eng().rtf / Math.max(1, eng().pool.length) > 1;
 function cut(answer) {
   const out = [];
   for (const s of answer.match(/[^.!?…]+[.!?…]*\s*/g) || [answer]) {
-    const t = s.trim(), long = slow() || (mode() === 'own' && kk.pool.length > 1) ? 64 : 110; if (!/[A-Za-z0-9]/.test(t)) continue;
+    const t = s.trim(), long = slow() || (mode() === 'own' && eng().pool.length > 1) ? 64 : 110; if (!/[A-Za-z0-9]/.test(t)) continue;
     const at = []; for (let i = 24; i < t.length - 24; i++) if (/[,;:—]/.test(t[i]) && t[i + 1] === ' ') at.push(i + 1);
     if (t.length > long && at.length) { const m = at.reduce((a, b) => Math.abs(b - t.length / 2) < Math.abs(a - t.length / 2) ? b : a); out.push({ text: t.slice(0, m).trim() }, { text: t.slice(m).trim() }); } else out.push({ text: t });
   }
