@@ -19,6 +19,7 @@ GENERATED = dict(persona="You are an AI, friendly and quick. Your face is one AI
                  note="A proof of concept. The face is an AI-generated still, not a real person, and the one answering is an AI. Nothing you say is kept by this page.")
 FACES = dict(
     paige=dict(voice="af_heart", **GENERATED), sunny=dict(voice="af_bella", **GENERATED), cy=dict(voice="am_michael", **GENERATED), dee=dict(voice="am_puck", **GENERATED), mel=dict(voice="am_fenrir", **GENERATED),
+    paige2=dict(voice="af_heart", **GENERATED),                 # a face file made from a second AI-generated picture of Paige (gen/prep_photo.py and friends)
     me=dict(voice="am_michael",
             persona="You are an AI, friendly and quick. Your face is animated from one photograph of the person who built this page and your voice may be a synthetic copy of theirs, both used with their permission. You are not that person, you do not speak for them and you know nothing about them; if asked, say so plainly.",
             note="A proof of concept. The face is animated from one photograph of this page's owner, and the voice, where the page says it is copied, from a short recording of them. The one answering is an AI, not them. Nothing you say is kept by this page."),

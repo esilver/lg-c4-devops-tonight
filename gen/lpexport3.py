@@ -20,20 +20,30 @@ import cv2, numpy as np
 from PIL import Image
 W, H = 1024, 576; LP = "lp4"
 GAIN = dict(paige=1.05, cy=1.0, dee=1.12, sunny=1.05, mel=0.95)
-GAIN.update(me=1.25)                                         # a face from a photograph; judged on the live avatar page (lipcal_photo.py, avatar/faces/check.js)
+GAIN.update(me=1.25, paige2=1.4)                             # faces from a photograph; me judged on the live avatar page, paige2 set so that it opens
+                                                             # as far as me for the same jaw (it opens about an eighth less, lipcal_photo.py)
 EXTRA = dict(sunny=dict(wxScale=1.08))
 ROWS = ["e1", "e2", "w1", "w2", "sg"]
-OUTLINE = {"me"}                                             # the jaw is seen against the backdrop: the mouth region stops short of the cut-out's outline (see export)
-PLAIN = {"me"}                                               # photographed against a plain backdrop: the plate is that backdrop, continued smoothly (plain_plate)
-def plain_plate(bgr, alpha, reach=12):
+OUTLINE = {"me", "paige2"}                                   # the jaw is seen against the backdrop: the mouth region stops short of the cut-out's outline (see export)
+PLAIN = {"me", "paige2"}                                     # photographed against a plain backdrop: the plate is that backdrop, continued smoothly (plain_plate)
+UNMIX = {"paige2"}                                           # see-through hair ends against a plain backdrop: the cut-out's colours are un-mixed from the plate (see export)
+STRAYS = {"paige2"}                                          # long hair with loose single hairs beside it, which the matte leaves out (plain_plate's `strays`)
+def plain_plate(bgr, alpha, reach=12, strays=0):
     """The plate for a face photographed against a plain backdrop. Carrying the surroundings inwards (what the other
     plates do) leaves a faint figure in a plain backdrop: streaks where stray hairs and the soft shadow next to the
     outline are dragged in, and a seam down the middle where the lighter side meets the darker one. Here the hole
     (the person and `reach` pixels around, which takes the stray hairs with it) is filled by the smoothest surface
     that meets the real backdrop all round it: every filled pixel is the average of its four neighbours (worked out
     from a coarse copy of the picture to the full one). The backdrop's own fine noise, from a patch of real backdrop,
-    is laid over the filled part so that it is not flatter than the rest."""
+    is laid over the filled part so that it is not flatter than the rest.
+    With `strays` (pixels), single loose hairs that stand off the outline further than `reach` are taken out too: anything
+    within that distance of the person that stands out from the smooth backdrop around it. The matte leaves such hairs out
+    of the cut-out, so they stayed in the plate, where they stood still beside the hair as it swung: faint ghosts of hair."""
     hole = cv2.dilate((alpha > 6).astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * reach + 1, 2 * reach + 1))) > 0
+    if strays:
+        g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32); near = cv2.distanceTransform((alpha <= 6).astype(np.uint8), cv2.DIST_L2, 5) < strays
+        odd = ((np.abs(g - cv2.cvtColor(cv2.medianBlur(bgr, 15), cv2.COLOR_BGR2GRAY).astype(np.float32)) > 3) & near).astype(np.uint8)
+        hole |= cv2.dilate(odd, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))) > 0
     pyr = [(bgr.astype(np.float32), hole)]
     while min(pyr[-1][0].shape[:2]) > 24:                                                           # coarser copies: a pixel is the mean of what is known in its 2x2 block
         im, h = pyr[-1]; H2, W2 = (im.shape[0] + 1) // 2, (im.shape[1] + 1) // 2; k = (~h).astype(np.float32)
@@ -57,8 +67,8 @@ def plain_plate(bgr, alpha, reach=12):
                 q = best[1] if rng.random() < 0.5 else best[1][::-1]; q = q if rng.random() < 0.5 else q[:, ::-1]; hh, ww = min(96, cur.shape[0] - y), min(96, cur.shape[1] - x); noise[y:y + hh, x:x + ww] = q[:hh, :ww]
         cur[hole] += noise[hole]
     return np.clip(cur, 0, 255)
-DETAIL = {"me"}                                              # a real photograph: its own fine detail is put back into every pose (photo_detail)
-QUALITY = dict(me=(86, 96))                                  # WebP quality of the poses and of the cut-out, where detail was put back (80 and 88 otherwise)
+DETAIL = {"me", "paige2"}                                    # a photograph: its own fine detail is put back into every pose (photo_detail)
+QUALITY = dict(me=(86, 96), paige2=(86, 96))                 # WebP quality of the poses and of the cut-out, where detail was put back (80 and 88 otherwise)
 def photo_detail(R, frame):
     """A re-posed render with the photograph's fine detail. The model that re-poses the face draws it a little soft:
     pores, stubble, single brow hairs and lashes and the rim of the iris are in the photograph and not in its renders,
@@ -168,7 +178,16 @@ def export(key, idx):
     plate = cv2.inpaint(bgr, mask, 7, cv2.INPAINT_TELEA).astype(np.float32); depth = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
     w1 = np.clip((depth - 2) / 10, 0, 1)[..., None]; w2 = np.clip((depth - 14) / 26, 0, 1)[..., None]
     plate = plate * (1 - w1) + cv2.GaussianBlur(plate, (0, 0), 4) * w1; plate = plate * (1 - w2) + cv2.GaussianBlur(plate, (0, 0), 12) * w2
-    if key in PLAIN: plate = plain_plate(cv2.cvtColor(frame.round().astype(np.uint8), cv2.COLOR_RGB2BGR), alpha)
+    if key in PLAIN: plate = plain_plate(cv2.cvtColor(frame.round().astype(np.uint8), cv2.COLOR_RGB2BGR), alpha, strays=90 if key in STRAYS else 0)
+    if key in UNMIX:
+        # Against a plain backdrop the colour behind every edge pixel is known: it is the plate. So the hair's own colour
+        # is worked out from the compositing equation (picture = a * hair + (1 - a) * backdrop) instead of being grown
+        # outwards from the solid interior, and the matte is used almost as it came. The grown colours and the tightened
+        # matte had turned the fine, see-through ends of long hair into a beaded, stepped edge; with the colours un-mixed
+        # the cut-out laid over the plate gives back the photograph's own edge.
+        au = np.clip((a01 - 0.02) / 0.98, 0, 1)[..., None]; pf = plate.astype(np.float32)
+        hair = np.clip((bgr.astype(np.float32) - (1 - au) * pf) / np.maximum(au, 1e-3), 0, 255); hair = np.where(au > 0.004, hair, grown.astype(np.float32))
+        fg = Image.fromarray(cv2.cvtColor(hair.round().astype(np.uint8), cv2.COLOR_BGR2RGB)).convert("RGBA"); fg.putalpha(Image.fromarray((au[..., 0] * 255).round().astype(np.uint8)))
     bg = Image.fromarray(cv2.cvtColor(plate.round().astype(np.uint8), cv2.COLOR_BGR2RGB)); bg.save(f"{d}/plate3.jpg", quality=90)      # kept to look at
     ent = dict(bg=uri(bg, "JPEG", quality=86), fg=uri(fg, quality=qf, method=6), seed=round(1.0 + idx * 1.7, 2), gain=GAIN[key],
                face=dict(cx=round(ex, 1), cy=round(ey + 0.45 * iod, 1), iod=round(iod, 1)), mouth=m, eyes=e,
