@@ -65,9 +65,12 @@ Asked next: not to have to press Speak for every question. The viewer's speech i
 once a click has started it, so Speak is now a toggle. While it is on, what is said is sent after 0.9 s of silence,
 the avatar answers, and it is listening again.
 
-- **It does not listen to itself.** While the avatar is thinking or speaking, and for 0.7 s after, nothing heard is
-  used, and whatever was half-heard is dropped. With loudspeakers it would otherwise answer its own voice. The cost
-  is that it cannot be interrupted by voice; the Stop button and typing still interrupt it.
+- **Speaking over it interrupts it.** The first version ignored the microphone while the avatar was thinking or
+  speaking, so that with loudspeakers it would not answer its own voice. That also meant it could not be interrupted,
+  which was the first thing tried. Now, during that time and for 1.2 s after, what is heard is compared with what the
+  avatar is saying. Words it is saying are taken as its own voice coming back and ignored. Two or more words it is
+  not saying (at least half of what was heard), or a single "stop", "wait" and the like, are the viewer: the avatar
+  stops at once, mid-word, and what the viewer goes on to say becomes the next question.
 - **A speaker who is still talking is waited for.** A live guess from the speech input holds the send back; the
   silence is counted from the last settled piece.
 - Listening ends when the view is hidden or the platform's own Stop is pressed; one click starts it again.
@@ -83,9 +86,10 @@ the avatar answers, and it is listening again.
   How much sooner the first sound comes with the real Claude was not measured.
 - Speed on a GPU is unknown until the readout from one is seen.
 - Hands-free was run with a stand-in for the speech input: one click, a question in two pieces with the speaker
-  still talking between them, the avatar's own words "heard" during and just after its answer, then a second
-  question with no click. The real speech input, and how much of the avatar's voice a real microphone picks up,
-  were not.
+  still talking between them, the avatar's own words "heard" during and just after its answer (ignored), a second
+  question with no click, and a third answer spoken over (stopped at once, the new question answered). The real
+  speech input was not, nor how a real recogniser writes down the avatar's voice from a loudspeaker: if it mishears
+  two words in a row, the avatar will interrupt itself.
 
 ## Files
 

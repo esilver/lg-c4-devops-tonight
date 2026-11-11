@@ -75,7 +75,7 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
   }
   { // hands-free: one click on Speak, then phrases arrive from the speech input; no further clicks
     const p = await b.newPage({ viewport: { width: 900, height: 1100 } }); const errs = []; p.on('pageerror', e => errs.push(e.message));
-    await p.addInitScript(`(${mocks})(${JSON.stringify(['Hello. Nice to hear you.', 'Yes, I am still listening.'])}, true)`); await p.goto(origin + '/novoice/index.html');
+    await p.addInitScript(`(${mocks})(${JSON.stringify(['Hello. Nice to hear you.', 'Yes, I am still listening.', 'There is a great deal more to say about that, and I am listening closely while I say it. Here is the rest of it, at some length.'])}, true)`); await p.goto(origin + '/novoice/index.html');
     await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0 && live.state === 'idle' && kk.state === 'failed' && !document.getElementById('mic').hidden, null, { timeout: 30000 });
     const state = () => p.evaluate(() => live.state), log = () => p.evaluate(() => [...document.getElementById('log').children].map(li => li.textContent)), until = (s, ms) => p.waitForFunction(s => live.state === s, s, { timeout: ms || 30000 });
     await p.click('#mic'); await until('listening');
@@ -87,9 +87,16 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
     const after = await state(), l1 = await log(); await p.waitForTimeout(1500);
     await p.evaluate(() => window.__dict.final('Are you still there?')); await until('thinking', 5000); await until('listening', 60000);
     const l2 = await log(), label = await p.evaluate(() => document.getElementById('mic').textContent);
+    // speaking over the avatar: a third question, begun while it is answering, must stop it at once
+    await p.evaluate(() => window.__dict.final('Tell me more.')); await until('speaking', 30000); await p.waitForTimeout(600);
+    await p.evaluate(() => window.__dict.partial('listening'));                   // one of its own words: not the viewer
+    const own = await state(); await p.evaluate(() => window.__dict.partial('wait I have another question')); await p.waitForTimeout(150);
+    const cutAt = await p.evaluate(() => ({ s: live.state, speaking: !!live.turn, mouth: live.beat ? 1 : 0 }));
+    await p.evaluate(() => { window.__dict.partial(''); window.__dict.final('Wait, I have another question.'); }); await until('thinking', 5000); await until('listening', 60000);
+    const l3 = await log();
     await p.click('#mic'); await until('idle', 5000);
-    const ok = held === 'listening' && after === 'listening' && l1.length === 2 && l1[0] === 'YouHi there. Who are you?' && l2.length === 4 && l2[2] === 'YouAre you still there?' && !errs.length; if (!ok) failed++;
-    console.log(`${ok ? 'ok  ' : 'FAIL'} hands-free: one click, then two questions by voice | waited while the speaker was still talking: ${held === 'listening'} | sent as "${l1[0]}" | the avatar's own words ignored: ${l1.length === 2 && l2.length === 4} | second question without a click: "${l2[2]}" | button while on: "${label}" | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
+    const ok = held === 'listening' && after === 'listening' && l1.length === 2 && l1[0] === 'YouHi there. Who are you?' && l2.length === 4 && l2[2] === 'YouAre you still there?' && own === 'speaking' && cutAt.s === 'listening' && !cutAt.speaking && l3[l3.length - 2] === 'YouWait, I have another question.' && !errs.length; if (!ok) failed++;
+    console.log(`${ok ? 'ok  ' : 'FAIL'} hands-free: one click, then questions by voice | waited while the speaker was still talking: ${held === 'listening'} | sent as "${l1[0]}" | the avatar's own words ignored: ${l1.length === 2 && l2.length === 4 && own === 'speaking'} | second question without a click: "${l2[2]}" | spoken over: state ${cutAt.s} at once, then "${l3[l3.length - 2]}" answered | button while on: "${label}" | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
     await p.close();
   }
   await b.close(); server.close(); process.exit(failed ? 1 : 0);
