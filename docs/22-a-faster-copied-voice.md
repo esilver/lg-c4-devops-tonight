@@ -95,7 +95,8 @@ after it was asked for, whatever the device, and nothing is downloaded. The serv
 and ends; its times for the sounds inside a word turned out to be the word's time divided evenly, so the page
 pronounces the line itself and lays each word's sounds out between the word's start and end. Against a reference
 aligner on eleven lines the service's word times ran 50 ms late; with that taken off, half the sounds sat within
-33 ms of the reference and 90% within 77 ms, a little looser than with the recogniser in the page.
+38 ms of the reference and 90% within 81 ms. The recogniser in the page, on the same lines in the voice made on the
+device, gave 21 ms and 60 ms.
 
 The same test showed where a hosted copy of the page had been losing time that the voice was blamed for: the host
 (Firebase Hosting) hands a streamed reply to the page only once it is complete. Asked at the function's own address
