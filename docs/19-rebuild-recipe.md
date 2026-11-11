@@ -20,7 +20,7 @@ What it holds:
 - **The numbers that took trial and error**: the 65 poses and both jaw lists, the relaxed-mouth settings per face, the
   smile scale, the lip level of 0.155 eye distances with its gain limits, the 70 ms timing correction for the first
   voice model, the grids, and the body, hair and blink settings.
-- **Tried and dropped**: forty-nine rows, each with why it was dropped and what replaced it.
+- **Tried and dropped**: every attempt that was replaced, each with why it was dropped and what replaced it.
 - **A plain statement, twice, that it is a recipe and not the working code.**
 
 It covers the bulletin video only. It leaves out the television page, the live avatar, any real person's photograph,

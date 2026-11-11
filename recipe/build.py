@@ -171,8 +171,8 @@ CSS = """
   .tally { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); }
   .tally::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--live); }
 
-  header { display: grid; gap: 18px; padding-top: 34px; }
-  h1 { margin: 0; font: 700 clamp(44px, 7.4vw, 86px)/0.95 var(--display); letter-spacing: .005em; text-transform: uppercase; text-wrap: balance; }
+  header { display: grid; gap: 18px; padding-top: 34px; grid-template-columns: minmax(0, 1fr); }
+  h1 { margin: 0; font: 700 clamp(44px, 7.4vw, 86px)/0.95 var(--display); letter-spacing: .005em; text-transform: uppercase; text-wrap: balance; overflow-wrap: anywhere; }
   h1 em { font-style: normal; color: var(--accent); }
   .deck { margin: 0; max-width: 70ch; font-size: 19px; }
   .notice { margin: 0; max-width: 78ch; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--live); font-size: 18px; }
@@ -192,7 +192,7 @@ CSS = """
   section { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); scroll-margin-top: 12px; }
   .strap { display: flex; align-items: stretch; background: var(--panel); border-left: 6px solid var(--accent); }
   .strap .no { display: grid; place-items: center; min-width: 52px; padding: 0 14px; font: 500 15px var(--mono); color: var(--accent); border-right: 1px solid var(--line); }
-  .strap h2 { margin: 0; padding: 9px 16px 8px; font: 700 31px/1.05 var(--display); letter-spacing: .02em; text-transform: uppercase; text-wrap: balance; }
+  .strap h2 { margin: 0; min-width: 0; padding: 9px 16px 8px; font: 700 31px/1.05 var(--display); letter-spacing: .02em; text-transform: uppercase; text-wrap: balance; overflow-wrap: anywhere; }
   .with { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; font: 500 12.5px var(--mono); color: var(--muted); }
   .with i { font-style: normal; color: var(--ink); border: 1px solid var(--line); background: var(--panel); border-radius: 4px; padding: 2px 8px; }
 

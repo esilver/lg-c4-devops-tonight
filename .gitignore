@@ -29,3 +29,4 @@ avatar/index.*.html
 avatar/test_*.png
 demo/avatar-*
 tests/output/voice/
+avatar/voice_full/

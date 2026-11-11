@@ -784,7 +784,7 @@ The body, the hair and the picture:
 |---|---|---|
 | Pinning | 0.5 × `iod` up from the bottom edge, 0.45 × `iod` in from each side | Up-and-down movement fades to nothing at the bottom, sideways movement at the sides. A band 0.9 × `iod` tall held the shoulders still |
 | Tilt | full at the face, none 3.3 × `iod` away, about a point 1.6 × `iod` below the face centre | The head tilts about the neck and the shoulders stay |
-| Breath lift | 0.11 × `iod` for a whole breath; the head takes a quarter | About 7 mm on a real person |
+| Breath lift | 0.11 × `iod` for a whole breath; the head takes a quarter | About 7 mm at life size |
 | Breath widening | 0.7 % | The chest widens as it fills |
 | Breath timing | in ends 40 ms before the first sound; in for `clamp(0.8 × gap, 0.14, 0.6)` s; out at 0.1 a second of speech; between lines in for 1.5 s, out for 2.4 s | A short gap allows only a quick top-up |
 | Body resettles | on 45 % of phrases, 0.02 to 0.07 × `iod`, over 1.1 s (the head takes 0.55 s) | Resettling on every phrase rocked the body from side to side |
@@ -841,7 +841,7 @@ Do not repeat these. Each row was built, tested or weighed up, and then replaced
 | 5 | Wav2Lip's stock windowing | Lips shut about a tenth of a second early | Window 75 ms earlier, then the measured shift |
 | 5 | Timing the reference against the aligner's m, b, p segments | The search window often caught a neighbouring f or v | The silence inside each p |
 | 5 | "Shut" taken from the pauses | The network leaves the lips apart in pauses. One presenter's mouth was shut for a third of her speech | The 12th percentile while speaking |
-| 5 | A common level of 0.13 with scaling down | Lips too tight. The presenter the network opened furthest was cut by a fifth | 0.155, and never below 1 |
+| 5 | A common level of 0.13 with scaling down | Mouths still opened too little. The presenter the network opened furthest was cut by a fifth | 0.155, and never below 1 |
 | 5 | The old closure track kept on top of the reference | Its long ramps swallowed short vowels between two closures | A short press only |
 | 6 | Fading to a "brows raised" picture; sliding the head as a flat picture | Two faint brows; no parallax | Displacement fields on a mesh |
 | 6 | Fields stored in eighths of a pixel | Clipped at 15.9 px without warning | A scale per field |

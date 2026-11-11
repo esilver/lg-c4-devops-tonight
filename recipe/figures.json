@@ -1,7 +1,7 @@
 {
  "title": "How to Rebuild the DevOps Tonight Presenters",
  "band": ["The recipe: how to rebuild it", "Every model ran locally, on a CPU"],
- "footer": ["DevOps Tonight", "The recipe", "10 November 2026"],
+ "footer": ["DevOps Tonight", "The recipe", "11 November 2026"],
  "facts": [
   {"n": "0", "label": "video models", "source": "No video-generation model is involved"},
   {"n": "1", "label": "still image for each presenter", "source": "a single generated photograph"},

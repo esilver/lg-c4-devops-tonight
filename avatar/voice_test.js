@@ -5,7 +5,7 @@
 // speech recogniser and a forced aligner and says whether the words and the reported times are right.
 //   node avatar/voice_test.js            (from the repository root; needs avatar/voice/ filled by avatar/get_voice.py)
 const { chromium } = require('playwright'), http = require('http'), fs = require('fs'), path = require('path');
-const ROOT = path.join(__dirname), OUT = process.argv[2] || path.join(__dirname, '..', 'tests', 'output', 'voice');
+const ROOT = path.join(__dirname), OUT = process.argv[2] || path.join(__dirname, '..', 'tests', 'output', 'voice'), DIR = process.env.VOICE_DIR || 'voice';      // VOICE_DIR=voice_full tries another model laid out the same way
 const TYPES = { '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 'application/json', '.html': 'text/html', '.bin': 'application/octet-stream' };
 const LINES = [
   ['af_heart', "Hi, I'm the avatar. Ask me anything you like."],
@@ -29,16 +29,16 @@ const LINES = [
   page.on('console', m => console.log('  page:', m.text())); page.on('pageerror', e => console.log('  page error:', e.message));
   await page.goto(`http://127.0.0.1:${port}/bench.html`);
   const t0 = Date.now();
-  const ready = await page.evaluate(() => new Promise((done, fail) => {
-    const w = window.w = new Worker('voice/worker.js', { type: 'module' }), steps = []; window.waiting = {};
+  const ready = await page.evaluate(DIR => new Promise((done, fail) => {
+    const w = window.w = new Worker(DIR + '/worker.js', { type: 'module' }), steps = []; window.waiting = {};
     w.onerror = e => fail(new Error('worker: ' + (e.message || 'failed to start')));
     w.onmessage = e => { const m = e.data;
       if (m.type === 'progress') { if (steps[steps.length - 1] !== m.step) steps.push(m.step); }
       else if (m.type === 'ready') done(Object.assign(m, { steps, isolated: self.crossOriginIsolated }));
       else if (m.type === 'error' && m.id == null) fail(new Error(m.at + ': ' + m.message));
       else if (window.waiting[m.id]) { window.waiting[m.id](m); delete window.waiting[m.id]; } };
-    w.postMessage({ type: 'init', base: new URL('voice/', location.href).href, voice: 'af_heart' });
-  }));
+    w.postMessage({ type: 'init', base: new URL(DIR + '/', location.href).href, voice: 'af_heart' });
+  }), DIR);
   console.log(`ready in ${((Date.now() - t0) / 1000).toFixed(1)} s; steps: ${ready.steps.join(' > ')}; threads ${ready.threads}; isolated ${ready.isolated}; warm-up line made in ${ready.rtf.toFixed(2)} x its length`);
   const rows = [];
   for (let i = 0; i < LINES.length; i++) {
