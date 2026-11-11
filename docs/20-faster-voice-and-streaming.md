@@ -1,4 +1,4 @@
-# A faster voice, and speaking while the reply is still being written
+# A faster voice, speaking while the reply is still being written, and hands-free
 
 The live avatar's own voice ([18](18-own-voice-and-a-real-face.md)) worked in the real viewer, but slowly: the page
 said a line took 1.5 times as long to make as to say, on a fast laptop. Asked why, and then asked to make it fast
@@ -59,6 +59,19 @@ once, so the first one is being made, and usually spoken, while the rest is stil
 the audio clock as before; the list of lines simply grows. Stopping, or asking something new, also stops Claude
 writing. A borrowed voice (Claude's, the browser's) still needs the whole reply first.
 
+## Hands-free
+
+Asked next: not to have to press Speak for every question. The viewer's speech input stays open for up to an hour
+once a click has started it, so Speak is now a toggle. While it is on, what is said is sent after 0.9 s of silence,
+the avatar answers, and it is listening again.
+
+- **It does not listen to itself.** While the avatar is thinking or speaking, and for 0.7 s after, nothing heard is
+  used, and whatever was half-heard is dropped. With loudspeakers it would otherwise answer its own voice. The cost
+  is that it cannot be interrupted by voice; the Stop button and typing still interrupt it.
+- **A speaker who is still talking is waited for.** A live guess from the speech input holds the send back; the
+  silence is counted from the last settled piece.
+- Listening ends when the view is hidden or the platform's own Stop is pressed; one click starts it again.
+
 ## Checked, and not
 
 - **The GPU itself was not run.** The build machine has no GPU and its headless browser offers no WebGPU, with any
@@ -69,6 +82,10 @@ writing. A borrowed voice (Claude's, the browser's) still needs the whole reply 
 - Streaming was run with a stand-in that delivers the reply in eight parts; all four page tests pass with it.
   How much sooner the first sound comes with the real Claude was not measured.
 - Speed on a GPU is unknown until the readout from one is seen.
+- Hands-free was run with a stand-in for the speech input: one click, a question in two pieces with the speaker
+  still talking between them, the avatar's own words "heard" during and just after its answer, then a second
+  question with no click. The real speech input, and how much of the avatar's voice a real microphone picks up,
+  were not.
 
 ## Files
 

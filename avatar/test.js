@@ -9,6 +9,8 @@
 //  3 bare page       opened from disk with nothing: checks the last fallbacks
 // and, between 1 and 2, the page with its voice but no Claude: it should say back what is typed, in its own voice,
 // from the first message on.
+// Last, hands-free: Speak is clicked once and two questions arrive from a stand-in for the speech input, with the
+// avatar's own words "heard" in between; they must be ignored and the second question need no click.
 // Run from the repository root:  node avatar/test.js
 const { chromium } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path');
 const OUT = process.argv[2] || path.join(__dirname, '..', 'tests', 'output', 'voice'); fs.mkdirSync(OUT, { recursive: true });
@@ -25,7 +27,11 @@ const mocks = (reply, withTts) => {
       cbs.state.forEach(f => f({ state: 'idle', reason: stop ? 'viewer_stopped' : 'completed' })); } };
   // the reply arrives as Claude's does: the whole text so far, a few times a second, then the result
   let asked = 0; const sample = async (input, opts) => { const text = reply[Math.min(asked++, reply.length - 1)]; window.__asked = performance.now(); for (let i = 1; i <= 8; i++) { await new Promise(r => setTimeout(r, 150)); if (opts && opts.onText) opts.onText({ text: text.slice(0, Math.round(text.length * i / 8)), delta: '' }); } window.__replied = performance.now(); return { text }; };
-  window.claude = { use: async n => ({ sample, tts: withTts ? tts : null })[n] || null };
+  // speech input: the test says the phrases (window.__dict.final), the page only ever clicks Speak once
+  const dh = { partial: [], final: [], state: [] }; let listening = false; const st = (state, reason) => dh.state.forEach(f => f({ state, reason }));
+  const dictation = { onPartial: f => dh.partial.push(f), onFinal: f => dh.final.push(f), onState: f => dh.state.push(f), active: () => listening, start: async () => { listening = true; st('listening'); }, stop: async () => { listening = false; st('idle', 'stopped'); } };
+  window.__dict = { final: text => dh.final.forEach(f => f({ text })), partial: text => dh.partial.forEach(f => f({ text })) };
+  window.claude = { use: async n => ({ sample, tts: withTts ? tts : null, dictation: withTts ? dictation : null })[n] || null };
 };
 const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffer), h = Buffer.alloc(44); h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVEfmt ', 8); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22); h.writeUInt32LE(24000, 24); h.writeUInt32LE(48000, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40); fs.writeFileSync(f, Buffer.concat([h, pcm])); };
 (async () => {
@@ -65,6 +71,25 @@ const wav = (f, pcm16) => { const pcm = Buffer.from(Int16Array.from(pcm16).buffe
       fs.writeFileSync(path.join(OUT, 'own_voice.json'), JSON.stringify({ lines, firstSound, rtf: voice.rtf, held: rows.map(r => r.held).find(v => v != null) }));
       console.log(`     saved ${lines.length} lines (audio, reported times, and the jaw the engine draws for every 10 ms of them) to ${path.relative(process.cwd(), OUT)}/own_voice.json`);
     }
+    await p.close();
+  }
+  { // hands-free: one click on Speak, then phrases arrive from the speech input; no further clicks
+    const p = await b.newPage({ viewport: { width: 900, height: 1100 } }); const errs = []; p.on('pageerror', e => errs.push(e.message));
+    await p.addInitScript(`(${mocks})(${JSON.stringify(['Hello. Nice to hear you.', 'Yes, I am still listening.'])}, true)`); await p.goto(origin + '/novoice/index.html');
+    await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0 && live.state === 'idle' && kk.state === 'failed' && !document.getElementById('mic').hidden, null, { timeout: 30000 });
+    const state = () => p.evaluate(() => live.state), log = () => p.evaluate(() => [...document.getElementById('log').children].map(li => li.textContent)), until = (s, ms) => p.waitForFunction(s => live.state === s, s, { timeout: ms || 30000 });
+    await p.click('#mic'); await until('listening');
+    await p.evaluate(() => { window.__dict.partial('hi'); window.__dict.final('Hi there.'); window.__dict.partial('who'); }); await p.waitForTimeout(1300);
+    const held = await state();                                                  // still talking: nothing sent yet
+    await p.evaluate(() => { window.__dict.partial(''); window.__dict.final(' Who are you?'); }); await until('thinking', 5000); await until('speaking');
+    await p.evaluate(() => window.__dict.final(' Nice to hear you.'));           // the avatar's own voice, picked up by the microphone
+    await until('listening', 60000); await p.evaluate(() => window.__dict.final(' hear you.')); await p.waitForTimeout(400);      // its tail, just after
+    const after = await state(), l1 = await log(); await p.waitForTimeout(1500);
+    await p.evaluate(() => window.__dict.final('Are you still there?')); await until('thinking', 5000); await until('listening', 60000);
+    const l2 = await log(), label = await p.evaluate(() => document.getElementById('mic').textContent);
+    await p.click('#mic'); await until('idle', 5000);
+    const ok = held === 'listening' && after === 'listening' && l1.length === 2 && l1[0] === 'YouHi there. Who are you?' && l2.length === 4 && l2[2] === 'YouAre you still there?' && !errs.length; if (!ok) failed++;
+    console.log(`${ok ? 'ok  ' : 'FAIL'} hands-free: one click, then two questions by voice | waited while the speaker was still talking: ${held === 'listening'} | sent as "${l1[0]}" | the avatar's own words ignored: ${l1.length === 2 && l2.length === 4} | second question without a click: "${l2[2]}" | button while on: "${label}" | errors: ${errs.length ? errs.slice(0, 2) : 'none'}`);
     await p.close();
   }
   await b.close(); server.close(); process.exit(failed ? 1 : 0);

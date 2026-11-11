@@ -70,7 +70,7 @@
   <form id="talk" autocomplete="off">
     <input id="say" type="text" placeholder="Type something to say" aria-label="What you say" maxlength="500">
     <button id="send" type="submit">Send</button>
-    <button id="mic" type="button" aria-pressed="false" hidden>Speak</button>
+    <button id="mic" type="button" aria-pressed="false" hidden title="Hands-free: click once, then just talk">Speak</button>
     <button id="stop" type="button" hidden>Stop</button>
   </form>
   <div class="row">
@@ -354,7 +354,8 @@ function ownTalker(lines, prep) {
 }
 
 /* ── a borrowed voice: Claude's where the page is given one, the browser's own otherwise, none at all in the last resort ── */
-const io = { sample: null, tts: null, dictation: null, voice: 'speechSynthesis' in window ? 'browser' : 'none', chosen: '' };
+const io = { sample: null, tts: null, dictation: null, voice: 'speechSynthesis' in window ? 'browser' : 'none', chosen: '', deafUntil: 0, forget: null };
+const PAUSE = 0.9;                             // seconds of silence after which what was said is sent
 // which voice speaks the next reply
 // (the audio clock may still be waking from the tap that sent the message; whatever is scheduled on it plays once it has)
 function mode() { const v = $('voice').value || ''; return v.startsWith('k:') && kk.state === 'ready' && actx && actx.state !== 'closed' ? 'own' : io.tts ? 'claude' : io.voice; }
@@ -450,6 +451,8 @@ function tech() {
 }
 $('files').onchange = e => { const list = [...e.target.files]; e.target.value = ''; if (kk.add) kk.add(list); };
 /* ── the conversation ── */
+// The avatar has finished (or been stopped). With hands-free on it is listening again, but not to the tail of its own voice.
+function settled() { io.deafUntil = wall() + 0.7; if (io.forget) io.forget(); if (io.dictation && io.dictation.active()) setState('listening', 'Listening'); else setState('idle', 'Ready'); }
 function setState(s, label) { live.state = s; const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
 function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; return t => { li.lastChild.nodeValue = t; $('log').scrollTop = 1e9; }; }
 // Asks Claude. `part` is called with the whole reply so far, a few times a second, while it is being written.
@@ -497,15 +500,15 @@ async function turn(text) {
   if (my !== live.seq) return;                                                                                // something newer was asked meanwhile
   if (answer) take(answer, true);
   live.history.push({ role: 'assistant', content: answer || lines.map(l => l.text).join(' ') });
-  if (!lines.length) { setState('idle', 'Ready'); return; }
+  if (!lines.length) { settled(); return; }
   try { if (talker) { talker.end(); await talker.done; } else await speak(lines, prep); } catch (e) {}
   if (begun) span[1] = clock(); if (my !== live.seq) return;
-  finish(); live.turn = null; rest(clock()); setState('idle', 'Ready');
+  finish(); live.turn = null; rest(clock()); settled();
 }
 $('talk').addEventListener('submit', e => { e.preventDefault(); const v = $('say').value; $('say').value = ''; sound();
   if (io.voice === 'browser' && !io.tts && !io.unlocked) { io.unlocked = true; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (x) {} }      // some browsers only speak after a first tap
   turn(v); });
-$('stop').onclick = () => { hush(); finish(); rest(clock()); setState('idle', 'Ready'); };
+$('stop').onclick = () => { hush(); finish(); rest(clock()); settled(); };
 
 /* ── picture ── */
 function frame() {
@@ -542,12 +545,21 @@ requestAnimationFrame(frame);
       t.onPosition(({ ms }) => { if (live.cur < 0) reach(0); if (!sync.on || sync.audio != null) return; const at = ms / 1000; if (at < sync.heard - 0.3) reach(live.cur + 1); sync.heard = at; sync.plan = at / sync.k; sync.at = wall(); }); }
     voiceList(); note();
   });
+  // Hands-free. One click starts listening and it stays open (the platform allows an hour): what is said is sent after
+  // a short silence, the avatar answers, and it is listening again. While the avatar is thinking or speaking, and for a
+  // moment after, nothing heard is used: with loudspeakers it would otherwise answer its own voice.
   use('dictation').then(d => {
-    if (!d) return; io.dictation = d; const mic = $('mic'); mic.hidden = false; let heard = '';
-    d.onPartial(({ text }) => { $('say').value = (heard + ' ' + text).trim(); });
-    d.onFinal(({ text }) => { heard = (heard + ' ' + text).trim(); $('say').value = heard; d.stop().catch(() => {}); });      // one phrase is one turn
-    d.onState(({ state }) => { const on = state === 'listening'; mic.setAttribute('aria-pressed', on); mic.textContent = on ? 'Listening…' : 'Speak'; if (on) setState('listening', 'Listening'); else { if (live.state === 'listening') setState('idle', 'Ready'); const v = heard; heard = ''; if (v) { $('say').value = ''; turn(v); } } });
-    mic.onclick = () => { sound(); if (mic.getAttribute('aria-pressed') === 'true') d.stop().catch(() => {}); else { hush(); if (live.beat) { finish(); rest(clock()); } heard = ''; d.start().catch(() => {}); } };
+    if (!d) return; io.dictation = d; const mic = $('mic'); mic.hidden = false; let heard = '', timer = 0;
+    const deaf = () => live.state === 'speaking' || live.state === 'thinking' || wall() < io.deafUntil;
+    const send = () => { clearTimeout(timer); timer = 0; const v = heard.trim(); heard = ''; if (!v || deaf()) return; $('say').value = ''; turn(v); };
+    const soon = () => { clearTimeout(timer); timer = setTimeout(send, PAUSE * 1000); };
+    io.forget = () => { clearTimeout(timer); timer = 0; heard = ''; $('say').value = ''; };                       // called when the avatar stops speaking
+    const join = (a, b) => (a && b && !/^\s/.test(b) ? a + ' ' + b : a + b).trimStart();                          // a settled piece brings its own leading space when it needs one
+    d.onPartial(({ text }) => { if (deaf()) return; $('say').value = join(heard, text); if (text) clearTimeout(timer); else if (heard) soon(); });      // still talking: wait
+    d.onFinal(({ text }) => { if (deaf()) return; heard = join(heard, text); $('say').value = heard; soon(); });
+    d.onState(({ state }) => { const on = state === 'listening'; mic.setAttribute('aria-pressed', on); mic.textContent = on ? 'Listening · stop' : 'Speak';
+      if (on) { if (live.state === 'idle') setState('listening', 'Listening'); } else if (state === 'idle') { if (heard) send(); if (live.state === 'listening') setState('idle', 'Ready'); } });
+    mic.onclick = () => { sound(); if (d.active()) d.stop().catch(() => {}); else { heard = ''; d.start().catch(() => {}); } };
   });
   voiceList(); note(); ownVoice();
 })();
