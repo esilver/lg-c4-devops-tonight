@@ -5,7 +5,8 @@
 // worker; each is started on that clock exactly as the page starts it on the audio clock, the canvas is saved every
 // frame, and the same audio is laid at the same times in the sound track. So picture and sound are as far apart in
 // the video as they are on the page when it plays live, apart from the time sound takes to leave a real device.
-//   node avatar/record.js demo/avatar-me.mp4 am_michael        (from the repository root; needs ffmpeg)
+//   node avatar/record.js demo/avatar.mp4 am_michael        (from the repository root; needs ffmpeg)
+// AVATAR_PAGE=index.<face>.html records a page built from a face file; AVATAR_LINES="one|two" sets what is said.
 const { chromium } = require('playwright'), fs = require('fs'), http = require('http'), path = require('path'), { spawn } = require('child_process');
 const OUT = process.argv[2] || path.join(__dirname, '..', 'demo', 'avatar.mp4'), VOICE = process.argv[3] || '', FPS = 30;
 const LINES = (process.env.AVATAR_LINES || "Hi. I'm an avatar made from one photograph.|The voice is a stock one, made on this machine, and my lips are timed by the same model that makes it.|Peter Piper picked a peck of pickled peppers, maybe more.|So, what would you like to talk about?").split('|');
@@ -15,7 +16,7 @@ const TYPES = { '.js': 'text/javascript', '.wasm': 'application/wasm', '.json': 
   const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] }), p = await b.newPage({ viewport: { width: 900, height: 1100 } });
   p.on('pageerror', e => console.log('page error:', e.message));
   await p.addInitScript(() => { window.__vt = 0; const real = performance.now.bind(performance); window.__real = real; performance.now = () => window.__vt * 1000; });      // the page's clock is ours
-  await p.goto(`http://127.0.0.1:${server.address().port}/index.html`);
+  await p.goto(`http://127.0.0.1:${server.address().port}/${process.env.AVATAR_PAGE || 'index.html'}`);
   await p.waitForFunction(() => typeof pending !== 'undefined' && pending === 0 && live.state === 'idle' && kk.state === 'ready', null, { timeout: 240000 });
   const made = await p.evaluate(async ({ LINES, VOICE }) => {
     window.requestAnimationFrame = () => 0;                                   // frames are drawn when asked for, not when the browser likes

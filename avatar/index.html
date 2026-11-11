@@ -902,7 +902,8 @@ function reach(i, ts) { const L = live.turn; if (!L || !L[i] || live.cur === i) 
 function begin(line, ts) {
   const sp = line.sp || plan(line.text); if (!sp) return;
   const b = { who: WHO, start: ts - PRE, lead: PRE, ai: live.n++, sp, tail: 0.5 };
-  if (line.first) b.sm = [[WHO, 0, 0.22, 0.55]];                                                                // a reply starts on a smile
+  // (A reply used to start on a smile. Blended with the rounded lips of a first sound it showed as a second, faint lip
+  // corner for a few frames, so the smile now simply lets go before the first word, as it does in the bulletin.)
   BREATH[WHO] = live.breath; buildSpeech(b); live.breath = BREATH[WHO]; breathe();
   if (line.sp) for (let i = 0; i < b.J.length; i++) b.J[i] *= OPEN;
   live.beat = b; sync.plan = 0; sync.at = wall(); sync.k = line.sp ? 1 : live.stretch; sync.on = true; sync.started = wall(); sync.heard = 0; sync.audio = line.when == null ? null : line.when;

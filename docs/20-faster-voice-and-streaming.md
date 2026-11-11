@@ -75,6 +75,18 @@ the avatar answers, and it is listening again.
   silence is counted from the last settled piece.
 - Listening ends when the view is hidden or the platform's own Stop is pressed; one click starts it again.
 
+## A second lip outline on the first words
+
+Reported from the real page: for the first second or two of a reply the lips "stutter", like a partial overlay.
+Rendering the start of a reply frame by frame (`avatar/record.js`, thirty frames a second) showed it: a faint second
+lip corner beside the mouth for about seven frames, then teeth through the first words.
+
+The cause was the page's own addition from [17](17-live-avatar-poc.md): a reply started on a smile, held over the
+first fifth of its first line. A smile and rounded lips cannot be blended from separate poses without one showing
+through the other, and a reply that opens on a rounded sound ("Sure") did exactly that. With replies now spoken a
+sentence at a time the first line is short, so the smile came and went in a third of a second. The starting smile is
+gone; the smile lets go before the first word, as in the bulletin. The same frames rendered again show one mouth.
+
 ## Checked, and not
 
 - **The GPU itself was not run.** The build machine has no GPU and its headless browser offers no WebGPU, with any
