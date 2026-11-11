@@ -1026,7 +1026,8 @@ function copiedVoice() {
   const base = new URL('voice/', document.baseURI).href, published = /(^|\.)claudeusercontent\.com$/.test(location.hostname);
   if (FACE.pvoice && !pk.pv.me) { const b = atob(FACE.pvoice), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); pk.pv.me = u.buffer; }
   const lost = why => { pk.state = 'failed'; pk.error = why; voiceList(); note(); };
-  const want = () => clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, 2), 1, 2);
+  const mobile = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const want = () => mobile ? 1 : clamp(Math.min((navigator.hardwareConcurrency || 2) - 1, 2), 1, 2);      // a phone gets one: each worker holds ~200 MB of model
   const init = w => { const m = { type: 'init', base, folder: !published, voice: Object.keys(pk.pv)[0], files: {}, voices: {} };
     for (const [k, v] of Object.entries(pk.files)) m.files[k] = v.slice(0); if (kk.files.wasm) m.wasm = kk.files.wasm.slice(0);
     for (const [k, v] of Object.entries(pk.pv)) m.voices[k] = new Float32Array(v.slice(0));
@@ -1055,6 +1056,8 @@ function copiedVoice() {
 // Sound may only start inside a tap. iPhones also mute a page's sound with the ringer switch unless the page asks for a
 // playback session or keeps a silent <audio> element going (docs/14); neither does anything elsewhere.
 function sound() {
+  // the browser's own voice (the fallback while the copied one loads) also only speaks after a tap has started it
+  if ('speechSynthesis' in window && !io.unlocked) { io.unlocked = true; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (x) {} }
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   try {
     if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; actx = new AC(); }
@@ -1065,8 +1068,8 @@ function sound() {
       put(0, 'RIFF'); v.setUint32(4, 36 + n, true); put(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
       v.setUint32(24, 22050, true); v.setUint32(28, 44100, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); put(36, 'data'); v.setUint32(40, n, true);
       const el = sound.keep = document.createElement('audio'); el.src = URL.createObjectURL(new Blob([b], { type: 'audio/wav' })); el.loop = true; el.setAttribute('playsinline', '');
-      const p = el.play(); if (p && p.catch) p.catch(() => {});
     }
+    if (sound.keep && sound.keep.paused) { const p = sound.keep.play(); if (p && p.catch) p.catch(() => {}); }
     const s = actx.createBufferSource(); s.buffer = actx.createBuffer(1, 1, actx.sampleRate); s.connect(actx.destination); s.start(0);
   } catch (e) {}
 }
@@ -1087,6 +1090,7 @@ function ownTalker(lines, prep) {
   };
   const pump = () => {
     while (q.i < lines.length && lines[q.i].made) {
+      if (actx.state !== 'running') actx.resume().catch(() => {});
       const l = lines[q.i], now = actx.currentTime; let when;
       if (l.skip) { q.i++; continue; }
       if (!q.on) {
@@ -1305,7 +1309,6 @@ async function turn(text) {
   finish(); io.lastLines = lines; live.turn = null; rest(clock()); settled();
 }
 $('talk').addEventListener('submit', e => { e.preventDefault(); const v = $('say').value; $('say').value = ''; sound();
-  if (io.voice === 'browser' && !io.tts && !io.unlocked) { io.unlocked = true; try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch (x) {} }      // some browsers only speak after a first tap
   turn(v); });
 $('stop').onclick = () => { hush(); finish(); rest(clock()); settled(); };
 
@@ -1330,6 +1333,29 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
+/* ── speech input outside the Claude viewer ──
+   The viewer's dictation does not exist on a page hosted elsewhere. Chrome and Edge (and Safari) have speech
+   recognition of their own; this wraps it in the same shape, so hands-free works the same way. In Chrome the sound is
+   sent to Google's speech service to be written down. Returns null where there is none (Firefox). */
+function browserDictation() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return null;
+  const h = { partial: [], final: [], state: [] }; let rec = null, want = false, state = 'idle', last = 0;
+  const set = (st, reason) => { state = st; h.state.forEach(f => f(reason ? { state: st, reason } : { state: st })); };
+  const make = () => {
+    const r = new SR(); r.continuous = true; r.interimResults = true; r.lang = navigator.language || 'en-US';
+    r.onstart = () => set('listening');
+    r.onresult = e => { let interim = ''; for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) { h.partial.forEach(f => f({ text: '' })); h.final.forEach(f => f({ text: ' ' + t.trim() })); } else interim += t; } if (interim) h.partial.forEach(f => f({ text: interim.trim() })); };
+    r.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { want = false; set('idle', 'not_granted'); } };
+    // the browser ends a session after a silence or a minute; while hands-free is on, it is started again at once
+    r.onend = () => { if (want && Date.now() - last > 300) { last = Date.now(); try { r.start(); return; } catch (x) {} } if (want) setTimeout(() => { if (want) try { r.start(); } catch (x) { want = false; set('idle', 'upstream_error'); } }, 400); else set('idle', 'stopped'); };
+    return r;
+  };
+  document.addEventListener('visibilitychange', () => { if (document.hidden && want) { want = false; try { rec.stop(); } catch (x) {} } });
+  return { onPartial: f => h.partial.push(f), onFinal: f => h.final.push(f), onState: f => h.state.push(f), active: () => want,
+    start: async () => { want = true; rec = rec || make(); set('starting'); try { rec.start(); } catch (x) {} },
+    stop: async () => { want = false; try { rec && rec.stop(); } catch (x) {} } };
+}
+
 /* ── what this view of the page can do ── */
 (async () => {
   const use = n => window.claude && window.claude.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null);
@@ -1349,7 +1375,7 @@ requestAnimationFrame(frame);
   // The microphone also hears the avatar's own voice from a loudspeaker. So while the avatar is thinking or speaking,
   // and for a moment after, what is heard is compared with what the avatar is saying: words it is saying are its own
   // voice coming back and are ignored; words it is not saying are the viewer, and stop it.
-  use('dictation').then(d => {
+  use('dictation').then(d => d || browserDictation()).then(d => {
     if (!d) return; io.dictation = d; const mic = $('mic'); mic.hidden = false; let heard = '', timer = 0;
     const busy = () => live.state === 'speaking' || live.state === 'thinking' || wall() < io.deafUntil;
     const words = t => t.toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
