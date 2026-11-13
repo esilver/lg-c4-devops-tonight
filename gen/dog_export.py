@@ -18,7 +18,7 @@ entry the page's engine reads (src/news.js), so nothing in the engine has to kno
           little differently (the corners sooner or later, the tongue lifted or let down); p, b and m get the
           resting mouth. What is inside the open pose goes down with the jaw as one piece, so it has to be the lower
           jaw's own, each thing in its place: the tongue lying on the lower lip, the lower canines at the front
-          corners either side of its tip (gen/dog_teeth.py sets them there; gen/dog_inside.py lays an editing
+          corners either side of its tip, leaning apart (gen/dog_teeth.py sets them there; gen/dog_inside.py lays an editing
           model's redraw of the inside into a pose). Tried, and looked at by the dog's owner: canines drawn far
           back beside the root of the tongue (the tongue then lies ahead of the front teeth without hanging out);
           the tongue drawn behind a row of lower teeth (half open, the upper lip hides the upper part of the
@@ -58,7 +58,7 @@ W, H, JAW = 1024, 576, 46                                   # the frame; jaw uni
 # small and falls off slowly, over the cheeks: with 0.14 of an eye distance falling off within 0.6 the cheeks, the
 # narrower one most, could be seen to squeeze and stretch at every turn of the head.
 # A file work/<key>/poses.json with the same fields replaces this entry, so a new set of poses needs no edit here.
-SETS = dict(dog=dict(rest="resting", jaw=["mouth_5h", 0.68, 0.6, 1.0], shut="resting",
+SETS = dict(dog=dict(rest="resting", jaw=["mouth_5i", 0.68, 0.6, 1.0], shut="resting",
                      eyes=dict(half="eyes_half", closed="eyes_closed", gl="eyes_right", gr=["eyes_left", 0.55], gd="eyes_down"),
                      travel=1.6, turn=(0.03, 0.09, 0.02), nod=(0.03, 0.07, 0.02), spread=(0.9, 0.9), headroom=32, gain=1.0, seed=9.5))
 ell = lambda r: cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))

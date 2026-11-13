@@ -1,4 +1,4 @@
-"""dog_teeth.py <key> <pose> <factor> <in> <down> <out> [sheet.jpg] : the two lower canines of an open-mouth pose set where a dog's stand
+"""dog_teeth.py <key> <pose> <factor> <in> <down> <out> [lean=<degrees>] [long=<times>] [sheet=<file.jpg>] : the two lower canines of an open-mouth pose set where a dog's stand
 
 work/<key>/poses/<pose>.png -> work/<key>/poses/<out>.png. In the run of mouths (dog_export.py, `jaw_run`) everything inside the open
 mouth goes down with the lower jaw as one piece. So the pose should hold what belongs to the lower jaw, where it belongs:
@@ -10,11 +10,16 @@ Each canine is found as a pale, colourless patch inside the mouth beside the ton
 them carried across); the better drawn one (the larger), `factor` times its size, is set with the middle of its root
 `in` pixels nearer the middle of the mouth and `down` pixels lower than it was, and the same tooth, mirrored, on the
 other side: two canines of one size, level, the same distance either side of the middle.
-Run from gen/:  ./venv2/bin/python dog_teeth.py dog mouth_5n 1.3 9 31 mouth_5h"""
-import sys, os, numpy as np, cv2
+lean: how far each leans away from the middle, in degrees, turned about its root. A dog's lower canines are not
+upright: they stand next to the incisors and splay apart, so that with the mouth shut each passes outside the upper
+incisors into the gap in front of the upper canine (ones that stand parallel or lean in are a fault of the bite, and
+catch the palate). Set upright they looked wrong to the dog's owner at once. long: the tooth made longer along its
+own length by that much (a canine is a long tooth; the pose's were drawn short).
+Run from gen/:  ./venv2/bin/python dog_teeth.py dog mouth_5n 1.2 13 31 mouth_5i lean=16 long=1.35"""
+import sys, os, math, numpy as np, cv2
 from PIL import Image
 import dog_export as D
-key, pose, k, din, down, out = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5]), sys.argv[6]; src, rest, out = f"work/{key}/poses/{pose}.png", f"work/{key}/poses/resting.png", f"work/{key}/poses/{out}.png"
+key, pose, k, din, down, out = sys.argv[1], sys.argv[2], float(sys.argv[3]), float(sys.argv[4]), float(sys.argv[5]), sys.argv[6]; more = dict(v.split("=", 1) for v in sys.argv[7:]); lean, long = math.radians(float(more.get("lean", 0))), float(more.get("long", 1)); src, rest, out = f"work/{key}/poses/{pose}.png", f"work/{key}/poses/resting.png", f"work/{key}/poses/{out}.png"
 P = np.asarray(Image.open(src).convert("RGB")).astype(np.float32); R = np.asarray(Image.open(rest).convert("RGB")).astype(np.float32)
 E = np.asarray(Image.open(os.path.join(os.path.dirname(src), "eyes_closed.png")).convert("RGB")).astype(np.float32)
 lids = cv2.morphologyEx((np.abs(E - R).max(axis=2) > 24).astype(np.uint8), cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8)); n, lab, st, cen = cv2.connectedComponentsWithStats(lids)
@@ -28,8 +33,9 @@ mid = (cen[found[0]][0] + cen[found[1]][0]) / 2; m_ = found[0] if st[found[0]][4
 # the master, grown about the middle of its root, on a canvas of its own; its last rows fade (it comes up from behind the lip)
 x, y, w, h, a = st[m_]; pad = 8; X0, Y0, X1, Y1 = x - pad, y - pad, x + w + pad, y + h + pad
 m = cv2.GaussianBlur(cv2.dilate((lab[Y0:Y1, X0:X1] == m_).astype(np.float32), np.ones((3, 3), np.uint8)), (0, 0), 0.7); patch = P[Y0:Y1, X0:X1]
-bx, by = cen[m_][0] - X0, float(y + h - Y0); big = (int(np.ceil(k * (X1 - X0))) + 4, int(np.ceil(k * (Y1 - Y0))) + 4); rx, ry = big[0] / 2, big[1] - 4.0 - k * (Y1 - Y0 - by)       # where the root lies on the canvas
-M2 = np.float32([[k, 0, rx - k * bx], [0, k, ry - k * by]])
+bx, by = cen[m_][0] - X0, float(y + h - Y0); far = int(np.ceil(k * long * (Y1 - Y0))) + 8; big = (2 * far, far + int(np.ceil(k * (X1 - X0))) + 8); rx, ry = float(far), float(far)       # where the root lies on the canvas
+c_, s_ = math.cos(lean), math.sin(lean) * -side                 # grown (more along its length), then turned about the root so that the tip goes away from the middle
+A = np.float32([[c_, s_], [-s_, c_]]) @ np.float32([[k, 0], [0, k * long]]); M2 = np.float32(np.hstack([A, np.float32([[rx], [ry]]) - A @ np.float32([[bx], [by]])]))
 pm = cv2.warpAffine(patch, M2, big, flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE); mm = np.clip(cv2.warpAffine(m, M2, big, flags=cv2.INTER_CUBIC), 0, 1)
 mm *= np.clip((ry + 1 - np.arange(big[1], dtype=np.float32)) / 3, 0, 1)[:, None]; mm = mm[..., None]
 # both taken out (the root of one is in shadow and dimmer than the rest of it: taken with it)
@@ -42,9 +48,9 @@ off = abs(cen[m_][0] - mid) - din; rooty = st[m_][1] + st[m_][3] + down
 for sgn in (side, -side):
     sprite, mask = (pm, mm) if sgn == side else (pm[:, ::-1], mm[:, ::-1]); cx = mid + sgn * off; rxx = rx if sgn == side else big[0] - 1 - rx
     ox, oy = int(round(cx - rxx)), int(round(rooty - ry)); O[oy:oy + big[1], ox:ox + big[0]] = O[oy:oy + big[1], ox:ox + big[0]] * (1 - mask) + sprite * mask
-    print(f"  canine: root at ({cx:.1f}, {rooty:.0f}), {sgn * off:+.1f} px from the middle of the mouth ({mid:.1f}); {k * st[m_][2]:.0f}x{k * st[m_][3]:.0f}")
+    print(f"  canine: root at ({cx:.1f}, {rooty:.0f}), {sgn * off:+.1f} px from the middle of the mouth ({mid:.1f}); {k * st[m_][2]:.0f} wide, {k * long * st[m_][3]:.0f} long, leaning {math.degrees(lean):.0f} degrees outwards (tip {sgn * (off + k * long * st[m_][3] * math.sin(lean)):+.1f} px from the middle)")
 Image.fromarray(np.clip(O, 0, 255).round().astype(np.uint8)).save(out)
-if len(sys.argv) > 7:
+if "sheet" in more:
     ys, xs = np.where(Op > 0); x0, x1, y0, y1 = xs.min(), xs.max(), ys.min(), ys.max()
     c = lambda im: cv2.resize(np.clip(im[y0 - 14:y1 + 14, x0 - 14:x1 + 14], 0, 255).astype(np.uint8), None, fx=3, fy=3, interpolation=cv2.INTER_LANCZOS4)
-    cv2.imwrite(sys.argv[7], cv2.cvtColor(np.vstack([c(P), c(O)]), cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    cv2.imwrite(more["sheet"], cv2.cvtColor(np.vstack([c(P), c(O)]), cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
