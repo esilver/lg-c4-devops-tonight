@@ -87,7 +87,7 @@ def opening(P, nose, box, dark=95):
     r, g, b = P[..., 0], P[..., 1], P[..., 2]; m = ((P.max(axis=2) < dark) | ((r - g > 40) & (b > g - 12))).astype(np.uint8)
     keep = np.zeros_like(m); keep[box[2]:box[3], box[0]:box[1]] = 1; m[cv2.dilate(nose, ell(5)) > 0] = 0; m &= keep
     return filled(largest(cv2.morphologyEx(cv2.morphologyEx(m, cv2.MORPH_OPEN, ell(1)), cv2.MORPH_CLOSE, ell(4)))[0])
-def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7, margin=16, fringe=22, shade=11):
+def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7, margin=16, fringe=22, shade=11, deep=0.85, narrow=0.4):
     """The run of mouths as a jaw that drops: ONE open pose P (lips, teeth and tongue as drawn) and the resting
     picture R, put together the way a mouth opens. Returns, for each of `shapes`, [how far open, picture] for each
     step, the lower lip no further than `travel` pixels from one to the next (`coarser` times that in the shapes
@@ -144,7 +144,11 @@ def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7,
     fill = lambda v: np.interp(x, x[has], v[has]); mid = cv2.GaussianBlur(cv2.medianBlur(fill(mid).astype(np.float32).reshape(1, -1), 5), (0, 0), 7, borderType=cv2.BORDER_REPLICATE).ravel()
     thick = np.clip(cv2.GaussianBlur(fill((lb - lt) / 2).astype(np.float32).reshape(1, -1), (0, 0), 10, borderType=cv2.BORDER_REPLICATE).ravel(), 4, 12)
     inl = cv2.GaussianBlur(has.astype(np.float32).reshape(1, -1), (0, 0), 4).ravel(); half = thick * inl; top = U + inl * np.clip(mid - U, 0, None)      # (P's own upper edge beyond the line's ends)
-    full = np.clip(L - top, 0, None) * np.clip(np.minimum(x - xl, xr - x) / 5.0, 0, 1)
+    # how far each column opens at the most. Towards the corners less than the pose has it, and running out to a point:
+    # a wide pose holds its corners open like a wedge, and a wedge of black that came and went beside each cheek with
+    # every syllable, blunt at its end, was the other half of "animation on her sides" (the pose before ran out thin).
+    side0 = np.abs(x - (xl + xr) / 2) / max(1.0, (xr - xl) / 2)
+    full = np.clip(L - top, 0, None) * (1 - narrow * step(0.45, 0.95, side0)) * step(0, 18, np.minimum(x - xl, xr - x).astype(np.float32))
     out_by = np.clip(np.maximum(r0 - x, x - r1), 0, None).astype(np.float32); late = 0.55 * out_by / max(1.0, out_by.max())
     # how far down the chin piece reaches: to under the pale tuft (fur that has little colour), and a margin
     sat = cv2.GaussianBlur(cv2.cvtColor(np.clip(R, 0, 255).astype(np.uint8), cv2.COLOR_RGB2HSV)[..., 1].astype(np.float32) / 255, (0, 0), 3); under = np.round(top + half + 2).astype(int)
@@ -161,6 +165,14 @@ def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7,
     runs = {}; dark = np.array([20, 13, 13], np.float32)
     away = np.abs(x - (xl + xr) / 2) / max(1.0, (xr - xl) / 2)                                    # 0 in the middle of the mouth, 1 at the pose's corners
     r_, g_, b_ = P[..., 0], P[..., 1], P[..., 2]; lit = ((r_ > 120) & (r_ - g_ > 45) & (b_ > g_ - 12) & (Op > 0)).astype(np.uint8)       # the tongue where the light falls on it
+    # Towards its corners a mouth is deep under the upper lip and the cheek, and in the dark: the pose's inside goes
+    # over into the lips' own darkest colour there, from a little outside the canines to the corners (`deep`: how far, at
+    # the corners). (A wide pose draws the wet inner lip along either side, red-brown with points of light and a paler
+    # edge. Seen once, wide open, that is a lip; coming and going with every syllable inside fur that does not move it
+    # was a ribbon laid along the cheek: "animation on her sides". The pose before had its sides near black, and they
+    # read as the dog's lips.)
+    cs = (deep * step(0.40, 0.80, np.abs(np.arange(P.shape[1]) - (xl + xr) / 2) / max(1.0, (xr - xl) / 2))).astype(np.float32)[None, :, None]
+    P = P * (1 - cs) + np.array([24, 16, 16], np.float32) * cs; r_, g_, b_ = P[..., 0], P[..., 1], P[..., 2]
     fy, fx = np.mgrid[0:P.shape[0], 0:P.shape[1]].astype(np.float32); P0 = P
     if lit.sum() > 200:                                                                            # it lifts from its upper edge; where it lies on the lower lip it stays
         lit = largest(cv2.morphologyEx(lit, cv2.MORPH_OPEN, ell(2)))[0]; tc = np.where(lit.any(axis=0))[0]; ty0 = np.argmax(lit[:, tc], axis=0).astype(np.float32); ty1 = (lit.shape[0] - 1 - np.argmax(lit[::-1, tc], axis=0)).astype(np.float32)
