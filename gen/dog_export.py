@@ -87,15 +87,16 @@ def opening(P, nose, box, dark=95):
     r, g, b = P[..., 0], P[..., 1], P[..., 2]; m = ((P.max(axis=2) < dark) | ((r - g > 40) & (b > g - 12))).astype(np.uint8)
     keep = np.zeros_like(m); keep[box[2]:box[3], box[0]:box[1]] = 1; m[cv2.dilate(nose, ell(5)) > 0] = 0; m &= keep
     return filled(largest(cv2.morphologyEx(cv2.morphologyEx(m, cv2.MORPH_OPEN, ell(1)), cv2.MORPH_CLOSE, ell(4)))[0])
-def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7, margin=16, fringe=22, shade=11, deep=0.85, narrow=0.4):
+def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7, margin=16, fringe=22, shade=11, deep=0.85, narrow=0.4, along=1.0):
     """The run of mouths as a jaw that drops: ONE open pose P (lips, teeth and tongue as drawn) and the resting
     picture R, put together the way a mouth opens. Returns, for each of `shapes`, [how far open, picture] for each
     step, the lower lip no further than `travel` pixels from one to the next (`coarser` times that in the shapes
     not named in `fine`: those are only seen in passing, mixed with the plain one). How far open is a fraction of the
     pose's own opening; the last step is at `most` (1: as far open as the pose).
-    shapes: {name: (side, tongue)}. An animal has no lip shapes, but its mouth is not one flap either: the corners
-    draw back for a grin and stay shut round a small opening, and the tongue is not fixed to the jaw. side > 0: the
-    corners open sooner than the middle asks: the wide mouth of an "ee". side < 0: the sides stay shut longer, so
+    shapes: {name: (side, tongue[, reach])}. An animal has no lip shapes, but its mouth is not one flap either: the
+    sides open more or less, and the tongue is not fixed to the jaw. side > 0: the sides open further than the
+    middle asks: the wide mouth of an "ee". reach 1: the mouth opens as far as the pose's own corners, drawn back
+    up the cheeks (a grin); otherwise between the ends of the resting line. side < 0: the sides stay shut longer, so
     the opening is a narrower one in the middle: an "oo". tongue: how far (pixels of the pose) the lit part of the
     tongue is lifted towards the upper teeth (as for t, d, n, l, s) or, negative, let down and back. All shapes are
     the same drawing; they differ in how far each column of the mouth is open and in where the tongue's soft upper
@@ -112,9 +113,12 @@ def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7,
       dark and are not sliced off along a line. As the gap grows P's black lower lip comes down over the lower half
       of the resting line, which it replaces (`tuck`): fully open, the lip sits on the pale fur as it does in P;
     - the chin: R's own fur from the lip down to a little under the pale tuft, as one piece that goes down with the
-      lower lip: all the way in the middle of the mouth, less to either side and not at all towards the corners
-      (a jaw turns on its hinge, and the corners of the mouth are next to it; the fur there, and the whiskers in
-      it, stay as they are and the black of the lower lip comes down over them). It lies OVER the fur of the throat, which stays
+      lower lip, along the whole mouth (`along`: how much of the lip's travel the fur under it takes at the sides;
+      the lip itself travels less there, as a jaw turns on its hinge and the corners of the mouth are next to it).
+      (At first the sides were left where they were, whiskers and all, and the black of the lower lip came down
+      over them. In the middle the mouth then opened as a jaw does, the fur under it going with it; at the sides
+      a dark shape grew and shrank on fur that stood still: "it feels like animation on her sides".)
+      It lies OVER the fur of the throat, which stays
       where it is: that fur is neither pushed together nor carried along. The piece's lower edge is not a line: over
       `fringe` pixels it ends hair by hair (its lighter hairs reach further), and towards that edge its broad
       shading goes over into that of the fur it lies on, so that no step of brightness travels with it.
@@ -144,11 +148,15 @@ def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7,
     fill = lambda v: np.interp(x, x[has], v[has]); mid = cv2.GaussianBlur(cv2.medianBlur(fill(mid).astype(np.float32).reshape(1, -1), 5), (0, 0), 7, borderType=cv2.BORDER_REPLICATE).ravel()
     thick = np.clip(cv2.GaussianBlur(fill((lb - lt) / 2).astype(np.float32).reshape(1, -1), (0, 0), 10, borderType=cv2.BORDER_REPLICATE).ravel(), 4, 12)
     inl = cv2.GaussianBlur(has.astype(np.float32).reshape(1, -1), (0, 0), 4).ravel(); half = thick * inl; top = U + inl * np.clip(mid - U, 0, None)      # (P's own upper edge beyond the line's ends)
-    # how far each column opens at the most. Towards the corners less than the pose has it, and running out to a point:
-    # a wide pose holds its corners open like a wedge, and a wedge of black that came and went beside each cheek with
-    # every syllable, blunt at its end, was the other half of "animation on her sides" (the pose before ran out thin).
-    side0 = np.abs(x - (xl + xr) / 2) / max(1.0, (xr - xl) / 2)
-    full = np.clip(L - top, 0, None) * (1 - narrow * step(0.45, 0.95, side0)) * step(0, 18, np.minimum(x - xl, xr - x).astype(np.float32))
+    # How far each column opens at the most (for each shape: see the loop below). Lips part along the line they meet
+    # in, and the corners of a mouth do not travel: so a mouth that opens to speak opens between the ends of the
+    # resting line (`within`), running out to a point at each. (The open pose is a wider mouth than the resting one,
+    # its corners drawn back up the cheeks. Opened as far as that, the mouth drew its line on along each cheek with
+    # every syllable and took it back: the last of "animation on her sides".) Only a shape that says so reaches the
+    # pose's own corners (`ends`): the grin of an animal that pants draws them back, slowly and once.
+    # Towards the corners every shape opens less than the pose has it: a wide pose holds them open like a wedge.
+    side0 = np.abs(x - (xl + xr) / 2) / max(1.0, (xr - xl) / 2); full = np.clip(L - top, 0, None)
+    ends = step(0, 18, np.minimum(x - xl, xr - x).astype(np.float32)); within = step(-6, 24, np.minimum(x - r0, r1 - x).astype(np.float32))
     out_by = np.clip(np.maximum(r0 - x, x - r1), 0, None).astype(np.float32); late = 0.55 * out_by / max(1.0, out_by.max())
     # how far down the chin piece reaches: to under the pale tuft (fur that has little colour), and a margin
     sat = cv2.GaussianBlur(cv2.cvtColor(np.clip(R, 0, 255).astype(np.uint8), cv2.COLOR_RGB2HSV)[..., 1].astype(np.float32) / 255, (0, 0), 3); under = np.round(top + half + 2).astype(int)
@@ -160,7 +168,7 @@ def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7,
     Rp = R[ya:yb, xa:xb + 1]; lum = Rp.mean(axis=2); hp = lum - cv2.GaussianBlur(lum, (0, 0), 2); hair = np.clip(hp / (2 * np.sqrt(cv2.GaussianBlur(hp * hp, (0, 0), 8)) + 2), -1, 1)
     edge = np.clip(0.5 - (yy - Fw[None, :]) / fringe, 0, 1); A = np.clip((edge + 0.32 * hair - 0.5) / 0.22 + 0.5, 0, 1) * (yy >= T[None, :] - 1)      # the piece, hair by hair at its lower edge
     Wm = step(-fringe / 2 - 14, -fringe / 2, yy - Fw[None, :]).astype(np.float32); low = cv2.GaussianBlur(Rp, (0, 0), 7)                              # where its broad shading goes over into the fur's below (under the tuft, which keeps its own)
-    mid, hw = (r0 + r1) / 2, (r1 - r0) / 2; chin = wide(1 - step(0.5 * hw, 0.95 * hw, np.abs(x - mid)), True)                                         # the chin is the middle of the lower lip; at the corners nothing goes down
+    mid, hw = (r0 + r1) / 2, (r1 - r0) / 2; chin = wide(1 - (1 - along) * step(0.5 * hw, 0.95 * hw, np.abs(x - mid)), True)                                         # the chin is the middle of the lower lip; at the corners nothing goes down
     at = lambda im, sy: cv2.remap(im, lx, (sy - ya).astype(np.float32), cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
     runs = {}; dark = np.array([20, 13, 13], np.float32)
     away = np.abs(x - (xl + xr) / 2) / max(1.0, (xr - xl) / 2)                                    # 0 in the middle of the mouth, 1 at the pose's corners
@@ -182,12 +190,13 @@ def jaw_run(P, R, nose, travel, most=1.0, shapes=None, fine=("n",), coarser=1.7,
     else: lit = np.zeros(P.shape[:2], np.float32)
     # the lower lip's own colour, column by column (its rim is drawn in it: drawn in black it stood round a brown lip like a pen line)
     lipc = np.stack([wide(cv2.GaussianBlur(np.array([P0[int(l) - 6:int(l) - 1, c, k].mean() for l, c in zip(L, x)], np.float32).reshape(1, -1), (0, 0), 4).ravel()) for k in range(3)], axis=1)
-    for name, (side, tongue) in (shapes or {"n": (0, 0)}).items():
+    for name, shape in (shapes or {"n": (0, 0)}).items():
+        side, tongue, reach = (list(shape) + [0])[:3]; fullk = full * (1 - narrow * (1 - 0.6 * max(side, 0)) * step(0.45, 0.95, side0)) * (within + reach * (ends - within))
         lag = late * (1 - 0.75 * side) if side >= 0 else np.clip(late + 0.48 * -side * step(0.3, 0.9, away), 0, 0.92); run = runs[name] = []
         P = P0 if not tongue else cv2.remap(P0, fx, (fy + tongue * lit).astype(np.float32), cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)                          # the pose with its tongue lifted or let down
         n = max(2, math.ceil(most * full.max() / (travel if name in fine else travel * coarser)))      # (most shapes are only seen mixed with the plain row: they can do with fewer steps)
         for o in [most * (q + 1) / n for q in range(n)]:
-            g = wide(cv2.GaussianBlur((np.clip((o - lag) / (1 - lag), 0, 1) * full).reshape(1, -1), (0, 0), 3).ravel(), True)        # the gap, column by column
+            g = wide(cv2.GaussianBlur((np.clip((o - lag) / (1 - lag), 0, 1) * fullk).reshape(1, -1), (0, 0), 3).ravel(), True)        # the gap, column by column
             d = (g - Hw * step(0, 2.5 * Hw + 1e-3, g)) * chin; t, b, sy = T[None, :], (T + g)[None, :], yy - d[None, :]                       # how far the chin goes down (the lip comes over the line's lower half)
             a, wm = np.clip(at(A, sy), 0, 1)[..., None], np.clip(at(Wm, sy), 0, 1)[..., None]
             fur = Rp + a * (at(Rp, sy) + wm * (low - at(low, sy)) - Rp)
@@ -232,7 +241,7 @@ def export(key):
     k = S["jaw"][2] if len(S["jaw"]) > 2 else 0; most = S["jaw"][3] if len(S["jaw"]) > 3 else 1; where = lambda o: o if not k else ((1 + k) - math.sqrt((1 + k) ** 2 - 4 * k * o)) / (2 * k)
     # The engine keeps a row of jaw steps for each lip shape (half and fully spread: e1, e2; half and fully rounded: w1,
     # w2) and for a smile (sg), and mixes rows as the sounds ask. Here the rows are the shapes of `jaw_run`.
-    SHAPES = dict(n=(0, 0), e1=(0.5, 3), e2=(1, 6), w1=(-0.5, -2.5), w2=(-1, -5), sg=(1, 0))
+    SHAPES = dict(n=(0, 0), e1=(0.5, 3), e2=(1, 6), w1=(-0.5, -2.5), w2=(-1, -5), sg=(1, 0, 1))
     # The smile's row is also the mouth that hangs open while the animal pants (BODY.pant in src/news.js): it is held
     # for seconds and rocks by a step or two, so it is made as fine as the plain row and gets its own list of steps (jg).
     runs = {k: [[JAW * S["jaw"][1] * where(o / most), im] for o, im in v] for k, v in jaw_run(wide_open, R, nose, S["travel"] / s, most, SHAPES, fine=("n", "sg")).items()}; run = runs["n"]      # [jaw, picture]
