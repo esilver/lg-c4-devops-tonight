@@ -317,7 +317,12 @@ function lines(text, maxW) {
 
 /* ── the mouth at a moment of a line: jaw opening (negative = lips pressed), lip shape, and whether the voice is on ── */
 function speechAt(b, bt, id) {
-  const J = samp(b.J, bt) * (b.taught ? 1 : ACT[id].m.gain || 1), C = samp(b.C, bt);      // the reference is already fitted to each face
+  // Lips are light and the tracks follow every sound (they are smoothed over 14 ms). A face whose whole jaw has to
+  // swing to speak (an animal's muzzle) may ask for a heavier one: BODY[id].jaw, in seconds. Its tracks are the same
+  // ones smoothed over that time, both ways so that nothing arrives late: quick syllables then open the mouth less
+  // far and every opening takes more pictures to happen, where a muzzle following each sound flapped like a puppet's.
+  const lag = (BODY[id] || {}).jaw, h = lag ? b.heavy && b.heavy.lag === lag && b.heavy.of === b.J ? b.heavy : (b.heavy = { lag, of: b.J, J: smooth(Float32Array.from(b.J), lag), C: smooth(Float32Array.from(b.C), lag / 2) }) : b;
+  const J = samp(h.J, bt) * (b.taught ? 1 : ACT[id].m.gain || 1), C = samp(h.C, bt);      // the reference is already fitted to each face
   return { o: clamp(C > 0.9 ? -0.12 * (C - 0.9) / 0.1 : J * (1 - C / 0.9), -0.12, 1.3), s: clamp(samp(b.S, bt), -1, 1), on: bt > b.t0 - 0.1 && bt < b.t1 + 0.1 };
 }
 // Smiles: a line may list [who, from, to, strength] as fractions of its length; the smile eases in and, unless it runs to the end, out.

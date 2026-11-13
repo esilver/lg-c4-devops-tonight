@@ -36,7 +36,19 @@ if os.path.exists(face):
     if os.path.exists(pv): FACES[who] = dict(FACES[who], pvoice=__import__("base64").b64encode(open(pv, "rb").read()).decode())
 else: cast = json.load(open(f"{root}/assets.json"))["cast"][who]
 news = open(f"{root}/src/news.js", encoding="utf-8").read()
-for old, new in (("/*ASSETS*/{ img: {}, cast: {} }", json.dumps({"img": {}, "cast": {who: cast}})), ("buildShow(SPEECH);\n", "")):
+def assets(cast):
+    """The cast as it goes into the page. A face whose mouth has one run of pictures for every lip shape (an animal's:
+    gen/dog_export.py) carries the same pictures six times over, a megabyte of repeats. There each repeat is written
+    as the picture's place in the first row, and one line in the page puts the pictures back before the engine reads
+    them. A face with no repeats is written exactly as before."""
+    cast = json.loads(json.dumps(cast)); rows = ("e1", "e2", "w1", "w2", "sg"); found = False
+    for c in cast.values():
+        m = c["mouth"]; at = {u: i for i, u in enumerate(m["n"])}
+        for k in rows:
+            if any(u in at for u in m[k]): m[k] = [at.get(u, u) for u in m[k]]; found = True
+    js = json.dumps({"img": {}, "cast": cast})
+    return js if not found else '(A => { for (const c of Object.values(A.cast)) for (const k of %s) c.mouth[k] = c.mouth[k].map(v => typeof v === "number" ? c.mouth.n[v] : v); return A; })(%s)' % (json.dumps(rows), js)
+for old, new in (("/*ASSETS*/{ img: {}, cast: {} }", assets({who: cast})), ("buildShow(SPEECH);\n", "")):
     assert news.count(old) == 1, old; news = news.replace(old, new)
 html = open(f"{d}/page.html", encoding="utf-8").read()
 for old, new in (("/*NEWS*/\n", news + "\n" + extra), ("/*FACE*/{ voice: 'af_heart', persona: '', note: '' }", json.dumps(FACES[who]))):
