@@ -207,7 +207,7 @@ function pitchTrack(str) {
 }
 const pitchAt = (b, bt) => { const x = (bt - b.lead) * 25, i = Math.floor(x); return x < 0 || i >= b.pc.length - 1 ? 0 : b.pc[i] + (b.pc[i + 1] - b.pc[i]) * (x - i); };
 // Per presenter, on the show's clock: where head and body rest, phrase by phrase; the breath; and when they speak.
-const POSE = {}, BREATH = {}, SPOKE = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
+const POSE = {}, BREATH = {}, SPOKE = {}, BLINK = {}, HEARD = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
 function buildSpeech(b) {
   const sp = b.sp, L = b.lead, segs = [], pauses = [], acc = [], who = b.who, sty = STYLE[who] || 1;
   b.words = sp.words.map(w => w[0]); b.wt = sp.words.map(w => w[1] + L); b.text = b.words.join(' '); b.pc = pitchTrack(sp.f0 || '');
@@ -295,6 +295,8 @@ function buildSpeech(b) {
   const mo = b.mo = { nods: [], brows: [], frowns: [], back: [], blinks: [], phr, first };
   // the syllables that stand out most carry a nod; the highest and strongest of them lift the brows
   for (const a of acc) if (a[1] >= 0.45 && !acc.some(q => q !== a && Math.abs(q[0] - a[0]) < 0.45 && q[1] > a[1])) mo.nods.push([a[0], a[1], hash(a[0], b.ai) < 0.5 ? -1 : 1]);
+  // the other stressed syllables are felt in the head too, a third as far: it keeps time with the speech between the nods
+  for (const a of acc) if (a[1] >= 0.2 && !mo.nods.some(q => Math.abs(q[0] - a[0]) < 0.3)) mo.nods.push([a[0], 0.32 * a[1], hash(a[0], b.ai + 1) < 0.5 ? -1 : 1, 1]);
   for (const a of acc) {
     const far = k => !k.some(q => Math.abs(q[0] - a[0]) < 1.3);
     if (a[1] >= 0.7 && a[2] >= 1.5 && far(mo.brows)) mo.brows.push([a[0], 0.3 + 0.35 * clamp((a[1] - 0.7) / 0.3, 0, 1), 0.1 + 0.25 * hash(a[0], 3)]);
@@ -305,9 +307,20 @@ function buildSpeech(b) {
   for (const [w0, w1] of b.grave || []) mo.frowns.push([b.wt[w0] + 0.05, 0.55, (w1 < b.wt.length ? b.wt[w1] : lastEnd) - b.wt[w0]]);
   // blinks gather at the ends of phrases and at glances; listeners nod at some phrase ends
   // (never two close together, and never in the last moments of a line, where a cut would land on closed eyes)
-  const blinkAt = t => { if (t < b.dur - 0.5 && !mo.blinks.some(q => Math.abs(q - t) < 0.9)) mo.blinks.push(t); };
+  // BLINK keeps them on the show's clock, so that a blink is not followed at once by another from the next line or a stray one
+  const BL = BLINK[who] = BLINK[who] || [], blinkAt = t => { if (t < b.dur - 0.5 && !BL.some(q => Math.abs(q - b.start - t) < 1.1)) { mo.blinks.push(t); BL.push(b.start + t); if (BL.length > 400) BL.shift(); } };
   mo.looks = (b.look || []).map(([w0, w1, gx, gy, turn]) => { const t0 = b.wt[w0] - 0.12, t1 = w1 < b.wt.length ? b.wt[w1] - 0.05 : b.dur + 1; blinkAt(t0 - 0.03); blinkAt(t1 + 0.02); return [t0, t1, gx, gy, turn || 0]; });
   phr.forEach((p, k) => { if (hash(k, b.ai + 2) < 0.5) blinkAt(p[1] + 0.03 + 0.1 * hash(k, b.ai)); if (k < phr.length - 1 && hash(k, b.ai + 5) < 0.5) mo.back.push([p[1] + 0.2, 0.5]); });
+  // A speaker does not hold the listener's eye throughout: finding the words of a phrase the eyes go aside (a little
+  // down, some of the time) from just before it starts, the head a touch after them, and they are back well before the
+  // phrase ends. About half the longer phrases; a blink often rides on the way out, as it does on any large movement of the eyes.
+  mo.glances = []; phr.forEach((p, k) => {
+    const t0 = p[0] - 0.3 + 0.2 * hash(k, b.ai + 7), t1 = Math.min(t0 + 0.5 + 0.6 * hash(k + 0.2, b.ai + 7), p[1] - 0.35);
+    if (p[1] - p[0] < 0.9 || t1 - t0 < 0.35 || hash(k + 0.6, b.ai + 6) > 0.55 || mo.looks.some(l => l[0] < t1 + 0.6 && l[1] > t0 - 0.6)) return;
+    // (far enough to be nearly the whole gaze pose: half-way, the pose and the photograph's eyes show as two irises)
+    mo.glances.push([t0, t1, (hash(k + 0.4, b.ai + 7) < 0.5 ? -1 : 1) * (0.7 + 0.3 * hash(k + 0.8, b.ai + 7)), hash(k + 0.1, b.ai + 8) < 0.4 ? 0.14 : 0]);
+    if (hash(k + 0.3, b.ai + 8) < 0.45) blinkAt(t0 - 0.03);
+  });
   mo.shakes = (b.shake || []).map(([w0, w1]) => [b.wt[w0] - 0.05, w1 < b.wt.length ? b.wt[w1] : lastEnd + 0.1]);
   // where the head rests during each phrase: it shifts as a new phrase begins, and settles when the line is over
   // The body resettles too, on some phrases, to the side the head turns: x a shift of weight (in eye distances), w a turn
@@ -315,7 +328,7 @@ function buildSpeech(b) {
   const P = POSE[who] = POSE[who] || POSE0.slice(); let sgn = P[P.length - 1].y > 0 ? 1 : -1;
   phr.forEach((p, k) => {
     sgn = hash(k + 0.5, b.ai) < 0.72 ? -sgn : sgn; const z = P[P.length - 1], mv = hash(k + 0.7, b.ai) < 0.45;       // the head resettles for every phrase, the body for fewer than half
-    P.push({ t: b.start + p[0] - 0.22, y: sgn * (0.1 + 0.3 * hash(k, b.ai + 1)) * sty, p: (hash(k + 0.2, b.ai) - 0.5) * 0.22 * sty, r: (hash(k + 0.4, b.ai) - 0.5) * 0.03 * sty,
+    P.push({ t: b.start + p[0] - 0.22, y: sgn * (0.1 + 0.3 * hash(k, b.ai + 1)) * sty, p: (hash(k + 0.2, b.ai) - 0.5) * 0.22 * sty, r: (hash(k + 0.4, b.ai) - 0.5) * 0.07 * sty,
       x: mv ? sgn * (0.02 + 0.05 * hash(k + 0.9, b.ai)) * sty : z.x, w: mv ? sgn * (0.15 + 0.4 * hash(k + 0.1, b.ai + 3)) : z.w, l: (hash(k + 0.3, b.ai + 4) - 0.35) * 0.7 });
   });
   const z = P[P.length - 1]; P.push({ t: b.start + lastEnd + 0.1, y: z.y * 0.35, p: 0, r: z.r * 0.35, x: z.x * 0.5, w: z.w * 0.4, l: 0 });
@@ -336,7 +349,7 @@ function buildSpeech(b) {
 // Lays the bulletin out on its clock from a set of recordings. Called once here; the demo page calls it again to switch voices.
 const BEATS = []; let SHOW_LEN = 0;
 function buildShow(speech) {
-  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
+  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE, BLINK, HEARD]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
   SHOW.forEach(L => {
     const b = Object.assign({ start: SHOW_LEN }, L);
     if (L.text && !L.split) { b.strap = !seen[L.who]; seen[L.who] = true; }      // name strap the first time someone is on camera
@@ -402,7 +415,12 @@ function lines(text, maxW) {
 
 /* ── the mouth at a moment of a line: jaw opening (negative = lips pressed), lip shape, and whether the voice is on ── */
 function speechAt(b, bt, id) {
-  const J = samp(b.J, bt) * (b.taught ? 1 : ACT[id].m.gain || 1), C = samp(b.C, bt);      // the reference is already fitted to each face
+  // Lips are light and the tracks follow every sound (they are smoothed over 14 ms). A face whose whole jaw has to
+  // swing to speak (an animal's muzzle) may ask for a heavier one: BODY[id].jaw, in seconds. Its tracks are the same
+  // ones smoothed over that time, both ways so that nothing arrives late: quick syllables then open the mouth less
+  // far and every opening takes more pictures to happen, where a muzzle following each sound flapped like a puppet's.
+  const lag = (BODY[id] || {}).jaw, h = lag ? b.heavy && b.heavy.lag === lag && b.heavy.of === b.J ? b.heavy : (b.heavy = { lag, of: b.J, J: smooth(Float32Array.from(b.J), lag), C: smooth(Float32Array.from(b.C), lag / 2) }) : b;
+  const J = samp(h.J, bt) * (b.taught ? 1 : ACT[id].m.gain || 1), C = samp(h.C, bt);      // the reference is already fitted to each face
   return { o: clamp(C > 0.9 ? -0.12 * (C - 0.9) / 0.1 : J * (1 - C / 0.9), -0.12, 1.3), s: clamp(samp(b.S, bt), -1, 1), on: bt > b.t0 - 0.1 && bt < b.t1 + 0.1 };
 }
 // Smiles: a line may list [who, from, to, strength] as fractions of its length; the smile eases in and, unless it runs to the end, out.
@@ -411,7 +429,9 @@ function smileAt(b, bt, id) {
   if (b.sm) for (const [who, f0, f1, amp] of b.sm) if (who === id) { const t0 = f0 * b.dur, t1 = f1 * b.dur; w = Math.max(w, (amp || 1) * rise(bt, t0 - 0.05, t0 + 0.4) * (f1 >= 1 ? 1 : 1 - rise(bt, t1, t1 + 0.5))); }
   return w;
 }
-function blinkShape(ph) { return ph <= 0 || ph >= 0.27 ? 0 : ph < 0.065 ? ease(ph / 0.065) : ph < 0.105 ? 1 : 1 - ease((ph - 0.105) / 0.165); }
+// A blink: shut in about a twentieth of a second, hardly held, open again in three times that. (It was held shut for
+// 40 ms and took 270 in all, which on screen is three or four pictures with the eyes shut: a slow, heavy blink.)
+function blinkShape(ph) { return ph <= 0 || ph >= 0.22 ? 0 : ph < 0.055 ? ease(ph / 0.055) : ph < 0.075 ? 1 : 1 - ease((ph - 0.075) / 0.145); }
 function postureAt(P, ts) {                  // every shift eases in over about half a second; shifts that overlap simply add up
   let y = P[0].y, p = P[0].p, r = P[0].r;
   for (let k = 1; k < P.length && P[k].t < ts; k++) { const e = rise(ts, P[k].t, P[k].t + 0.55); y += (P[k].y - P[k - 1].y) * e; p += (P[k].p - P[k - 1].p) * e; r += (P[k].r - P[k - 1].r) * e; }
@@ -425,7 +445,10 @@ function bodyPostureAt(P, ts) {              // the body takes about a second ov
 const breathAt = (id, ts) => { const B = BREATH[id]; return B && B.T ? curve(B.T, B.Y, B.M, ts) : 0.45; };      // how full the lungs are, 0..1
 // A presenter who is not speaking wears the photograph's own slight smile; it lets go just before they speak and comes back after.
 function restAt(id, ts) { let w = 1; for (const [t0, t1] of SPOKE[id] || []) w = Math.min(w, 1 - rise(ts, t0 - 0.45, t0 - 0.15) * (1 - rise(ts, t1 + 0.35, t1 + 1.1))); return w; }
-const nodShape = x => gauss(x - 0.03, 0.085) - 0.3 * gauss(x + 0.17, 0.07);               // a small lift, the drop on the syllable, the return
+// Being spoken to: HEARD[id] lists [from, to] on the show's clock. A page that hears its viewer fills it in (from the
+// viewer's first sound until the answer begins); the bulletin has nobody to hear. Only a face that asks shows it (below).
+function heardAt(id, ts) { let w = 0; const L = HEARD[id] || []; for (let i = Math.max(0, L.length - 4); i < L.length; i++) w = Math.max(w, rise(ts, L[i][0], L[i][0] + 0.3) * (1 - rise(ts, L[i][1], L[i][1] + 0.7))); return w; }
+const nodShape = x => gauss(x - 0.03, x < 0.03 ? 0.085 : 0.16) - 0.3 * gauss(x + 0.17, 0.07);      // a small lift, the drop on the syllable, and a return that takes twice as long as the drop (as quick as the drop, it was a twitch)
 const holdShape = (x, hold) => rise(x, -0.18, -0.02) * (1 - rise(x, hold, hold + 0.32));
 /* Everything about one face at one moment. b / bt: the line on air and how far into it; ts: the show's clock.
    Returns mouth (o, s, g = smile: 0 relaxed for speech, 0.5 the photograph's own expression, 1 a broad smile), eyes
@@ -434,28 +457,66 @@ const holdShape = (x, hold) => rise(x, -0.18, -0.02) * (1 - rise(x, hold, hold +
 function faceAt(id, b, bt, ts, still) {
   const a = ACT[id], sd = a.m.seed, sty = STYLE[id] || 1, talk = b.sp && b.who === id, mo = b.mo, sp = talk ? speechAt(b, bt, id) : null;
   const P = postureAt(POSE[id] || POSE0, ts), q = { o: sp ? sp.o : 0, s: sp ? sp.s : 0, g: Math.max(b.sp ? smileAt(b, bt, id) : 0, 0.5 * restAt(id, ts)), on: !!(sp && sp.on) };
-  let yaw = P[0] + 0.07 * wob(ts * 0.5, sd), pit = P[1] + 0.05 * wob(ts * 0.6, sd + 3), roll = P[2] + 0.0035 * wob(ts * 0.45, sd + 7), bu = 0, bd = 0, emph = 0, blink = 0;
-  // the eyes dart a little all the time
-  const slot = Math.floor(ts / 0.85), tg = k => [(hash(k, sd) - 0.5) * 0.5, hash(k + 0.3, sd) < 0.2 ? 0.3 * hash(k + 0.7, sd) : 0], g0 = tg(slot - 1), g1 = tg(slot);
+  let yaw = P[0] + 0.1 * wob(ts * 0.5, sd), pit = P[1] + 0.07 * wob(ts * 0.6, sd + 3), roll = P[2] + 0.005 * wob(ts * 0.45, sd + 7), bu = 0, bd = 0, emph = 0, blink = 0;
+  // Nobody holds a pose for long, speaking or not: every few seconds, at no fixed interval, the head resettles a little
+  // (a slight turn, tilt and lift, taken up over most of a second). Without it a listener is a photograph that blinks.
+  { const k = Math.floor(ts / 4.7), e = rise(ts, k * 4.7 + 2.6 * hash(k + 0.4, sd), k * 4.7 + 2.6 * hash(k + 0.4, sd) + 0.85), v = (j, n) => hash(j, sd + n) - 0.5;
+    yaw += 0.5 * (v(k - 1, 31) + (v(k, 31) - v(k - 1, 31)) * e); pit += 0.28 * (v(k - 1, 33) + (v(k, 33) - v(k - 1, 33)) * e); roll += 0.03 * (v(k - 1, 35) + (v(k, 35) - v(k - 1, 35)) * e); }
+  // The eyes rest on the viewer, and dart a little aside about a third of the time (sideways mostly: the downward pose
+  // lowers the lids, and looks sleepy if it is used often). They used to sit a little off centre all the time, which
+  // moved the iris by less than a pixel and cost the eyes a quarter of their sharpness: any gaze pose is a softer
+  // render mixed into the photograph's own eyes.
+  const slot = Math.floor(ts / 0.85), tg = k => hash(k + 0.5, sd) < 0.32 ? [(hash(k, sd) < 0.5 ? -1 : 1) * (0.18 + 0.2 * hash(k + 0.9, sd)), hash(k + 0.3, sd) < 0.3 ? 0.14 * hash(k + 0.7, sd) : 0] : [0, 0], g0 = tg(slot - 1), g1 = tg(slot);
   const ge = clamp((ts - (slot * 0.85 + hash(slot + 0.1, sd) * 0.5)) / 0.045, 0, 1); let gx = g0[0] + (g1[0] - g0[0]) * ge, gy = g0[1] + (g1[1] - g0[1]) * ge;
   if (talk) {
     const x0 = bt - mo.first;                                    // just before speaking: a breath, chin and brows lift slightly
     const prep = rise(x0, -0.42, -0.14) * (1 - rise(x0, -0.06, 0.16)); pit -= 0.1 * prep; bu += 0.1 * prep;
-    for (const [t, A, side] of mo.nods) { const n = A * nodShape(bt - t); pit += 0.55 * sty * n; yaw += 0.12 * side * n; roll += 0.006 * side * n; emph += A * gauss(bt - t, 0.22); }
+    for (const [t, A, side, minor] of mo.nods) { const n = A * nodShape(bt - t); pit += 0.55 * sty * n; yaw += 0.12 * side * n; roll += 0.006 * side * n; if (!minor) emph += A * gauss(bt - t, 0.22); }
     if (sp.on) pit -= 0.028 * clamp(pitchAt(b, bt), -5, 6) + 0.05 * Math.max(0, sp.o);         // the head rides the pitch of the voice, and tips back a touch as the jaw drops
+    // and it is never still while its owner talks: it wanders, faster and further than at rest, eased in and out with the line
+    const live = rise(bt, mo.first - 0.2, mo.first + 0.5) * (1 - rise(bt, b.t1 - 0.3, b.t1 + 0.5)) * sty;
+    yaw += 0.13 * live * wob(ts * 1.15, sd + 21); pit += 0.09 * live * wob(ts * 1.4, sd + 25); roll += 0.007 * live * wob(ts * 0.9, sd + 29);
     for (const [t, A, hold] of mo.brows) { const h = A * holdShape(bt - t, hold); bu += h * Math.min(1.15, sty); if (hold > 0.4) { pit -= 0.14 * h; roll += 0.012 * h; } }
     for (const [t, A, hold] of mo.frowns) bd += A * holdShape(bt - t, hold);
     if (sp.on) bu += 0.02 * clamp(pitchAt(b, bt), 0, 6);
     for (const [t0, t1] of mo.shakes) yaw += 0.3 * Math.sin((bt - t0) * 11.5) * rise(bt, t0, t0 + 0.15) * (1 - rise(bt, t1 - 0.2, t1 + 0.1));
     for (const [t0, t1, lx, ly, turn] of mo.looks) { const e = rise(bt, t0, t0 + 0.08) * (1 - rise(bt, t1, t1 + 0.08)), h = rise(bt, t0 - 0.05, t0 + 0.4) * (1 - rise(bt, t1 - 0.05, t1 + 0.45)); gx += (lx - gx) * e; gy += (ly - gy) * e; yaw += turn * h; }
+    for (const [t0, t1, lx, ly] of mo.glances) { const e = rise(bt, t0, t0 + 0.06) * (1 - rise(bt, t1, t1 + 0.07)), h = rise(bt, t0 + 0.03, t0 + 0.4) * (1 - rise(bt, t1, t1 + 0.4)); gx += (lx - gx) * e; gy += (ly - gy) * e; yaw += 0.1 * lx * h; }
     for (const t of mo.blinks) blink = Math.max(blink, blinkShape(bt - t));
-  } else if (mo) for (const [t, A] of mo.back) pit += 0.34 * A * (nodShape(bt - t) + 0.6 * nodShape(bt - t - 0.3));      // a listener's small double nod
-  // other blinks fall irregularly, but not right next to one that belongs to the speech
-  for (let k = Math.floor(ts / 1.25) - 1; k <= Math.floor(ts / 1.25); k++) {
-    if (hash(k, sd) > 0.2) continue; const at = k * 1.25 + hash(k + 0.5, sd) * 0.9;
+  } else {
+    if (mo) for (const [t, A] of mo.back) pit += 0.34 * A * (nodShape(bt - t) + 0.6 * nodShape(bt - t - 0.3));      // a listener's small double nod
+    // someone who is not speaking looks away now and then, briefly, and the head starts after the eyes
+    const k = Math.floor(ts / 6.1), t0 = k * 6.1 + 4 * hash(k + 0.2, sd + 41), t1 = t0 + 0.35 + 0.5 * hash(k + 0.5, sd + 41);
+    if (hash(k, sd + 43) < 0.55) { const lx = (hash(k + 0.7, sd + 41) < 0.5 ? -1 : 1) * (0.65 + 0.25 * hash(k + 0.9, sd + 41)), e = rise(ts, t0, t0 + 0.06) * (1 - rise(ts, t1, t1 + 0.07)); gx += (lx - gx) * e; gy *= 1 - e; yaw += 0.07 * lx * rise(ts, t0 + 0.03, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.4)); }
+  }
+  // A dog tilts its head. BODY[id].tilt (radians) asks for that: now and then, while its owner is not speaking, the
+  // head goes over to one side for a second or two, the ears coming up with it, and comes back (restAt lets it go
+  // before the next word and keeps it away until a moment after the last one).
+  // An animal shows what it is about with its mouth and its ears, and the page may know that it is being spoken to
+  // (HEARD). Three more things a face may ask for, all of them only while its owner is not speaking:
+  //   pant: left alone and at ease the mouth hangs open, the corners drawn back, and rocks a little with each quick
+  //         breath, in bouts of a few seconds; the ears let go a little meanwhile. The number is how far open, on the
+  //         scale of speech.
+  //   perk: spoken to, it shuts its mouth, lifts its ears (the number, on the scale of the brows) and keeps its eyes on
+  //         whoever is speaking, until it answers.
+  //   tilt: spoken to, the head more often than not goes over to one side a moment after the first word.
+  { const K = BODY[id] || {}, tl = K.tilt, on = tl || K.pant || K.perk ? restAt(id, ts) : 0, hear = on ? heardAt(id, ts) * on : 0; let pe = 0;
+    if (K.pant && on) { const k = Math.floor(ts / 10.4), t0 = k * 10.4 + 0.6 + 2.2 * hash(k + 0.3, sd + 65), t1 = t0 + 3.5 + 3.3 * hash(k + 0.6, sd + 65);
+      if (hash(k, sd + 67) < 0.72) pe = rise(ts, t0, t0 + 0.8) * (1 - rise(ts, t1, t1 + 0.6)) * on * (1 - heardAt(id, ts)); }
+    if (tl) { const k = Math.floor(ts / 6.3), t0 = k * 6.3 + 0.8 + 2.6 * hash(k + 0.3, sd + 51), t1 = t0 + 1.3 + 1.7 * hash(k + 0.6, sd + 51);      // (not while it pants: a tilt is attention)
+      if (hash(k, sd + 53) < 0.6) { const e = rise(ts, t0, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.55)) * on * (1 - hear) * (1 - pe); roll += (hash(k + 0.8, sd + 51) < 0.5 ? -1 : 1) * tl * e; bu += 0.45 * e; }
+      const L = HEARD[id], h0 = L && L.length ? L[L.length - 1][0] : null;
+      if (hear && hash(h0, sd + 71) < 0.65) { const a0 = h0 + 0.4 + 0.5 * hash(h0 + 0.2, sd + 71), a1 = a0 + 1.3 + 1.5 * hash(h0 + 0.4, sd + 71); roll += (hash(h0 + 0.6, sd + 71) < 0.5 ? -1 : 1) * tl * rise(ts, a0, a0 + 0.4) * (1 - rise(ts, a1, a1 + 0.55)) * hear; } }
+    if (K.perk && hear) { bu += K.perk * hear; gx *= 1 - hear; gy *= 1 - hear; }
+    if (pe > 0) { q.o = Math.max(q.o, pe * (K.pant * (1 + 0.12 * wob(ts * 0.33, sd + 65)) + 0.022 * Math.sin(2 * Math.PI * (2.7 * ts + 0.35 * wob(ts * 0.21, sd + 67))))); q.g = Math.max(q.g, pe); bd += 0.6 * pe; } }
+  // other blinks fall irregularly, but not right next to one that belongs to the speech: one in every stretch of about
+  // three seconds, anywhere in it, so they come one to five seconds apart (they used to be drawn with a small chance
+  // every second or so, which now and then left the eyes open for a quarter of a minute)
+  for (let k = Math.floor(ts / 3.1) - 1; k <= Math.floor(ts / 3.1); k++) {
+    const at = k * 3.1 + hash(k + 0.5, sd) * 2.2;
     if (at - b.start > b.dur - 0.5) continue;
-    if (talk && mo.blinks.some(t => Math.abs(b.start + t - at) < 0.7)) continue;
-    blink = Math.max(blink, blinkShape(ts - at), hash(k + 0.2, sd) < 0.14 ? blinkShape(ts - at - 0.33) : 0);                 // now and then a double blink
+    if ((BLINK[id] || []).some(t => Math.abs(t - at) < 1.4)) continue;
+    blink = Math.max(blink, blinkShape(ts - at), hash(k + 0.2, sd) < 0.05 ? blinkShape(ts - at - 0.33) : 0);                 // now and then a double blink
   }
   if (still) { yaw = pit = roll = emph = 0; }
   q.blink = blink; q.gx = clamp(gx, -1, 1); q.gy = clamp(gy, 0, 1); q.bu = clamp(bu, 0, 0.92); q.bd = clamp(bd, 0, 1);
@@ -490,7 +551,7 @@ function mouthLayers(a, o, s, g) {
   const as = Math.min(1, Math.abs(s)) * 2, wn = Math.max(0, 1 - as), w1 = as <= 1 ? as : 2 - as, w2 = Math.max(0, as - 1), press = o < 0 ? Math.min(1, -o / 0.12) : 0;
   if (press > 0) out.push([a.mP, press * wn * rest]);
   row(a.mN, M.jn, wn * rest, true); row(s >= 0 ? a.rows.e1 : a.rows.w1, M.js, w1 * rest); row(s >= 0 ? a.rows.e2 : a.rows.w2, M.js, w2 * rest);
-  row(a.rows.sg, M.js, gs); if (gh > 0.004) out.push([a.mH, gh]);
+  row(a.rows.sg, M.jg || M.js, gs); if (gh > 0.004) out.push([a.mH, gh]);      // (a face may give the smile's row its own, finer steps: jg)
   return out;
 }
 function eyeLayers(a, q) {
@@ -522,7 +583,7 @@ const warpGL = (() => {
   // distance below it over which a turn of the shoulders reaches its full size (the collar is near the axis of the
   // turn and hardly moves; the middle of the chest is well in front of it); uWd = (wind, flutter, time);
   // uPin = how far in from the side edges and up from the bottom edge the pinning reaches.
-  gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 aP; attribute vec4 aA, aB, aC; attribute vec3 aM; attribute float aK; uniform vec4 uW, uV, uT, uBd, uBc, uBr, uHr, uWd; uniform vec2 uPin; varying vec2 vUV;
+  gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 aP; attribute vec4 aA, aB, aC; attribute vec3 aM; attribute float aK; uniform vec4 uW, uV, uT, uBd, uBc, uBr, uHr, uWd; uniform vec3 uZ; uniform vec2 uPin; varying vec2 vUV;
     void main() { vec2 d = aA.xy * uW.x + aA.zw * uW.y + aB.xy * uW.z + aB.zw * uW.w + aC.xy * uV.x + aC.zw * uV.y;
       d += aK * (uT.xy + uV.z * vec2(uT.w - aP.y, aP.x - uT.z));
       vec2 q = aP - uBc.xy; float u = (aP.x - uBc.z) * uBc.w; vec2 t = uBd.xy + uBd.z * vec2(-q.y, q.x) + uBd.w * q;
@@ -530,17 +591,36 @@ const warpGL = (() => {
       float ph = dot(aP, vec2(0.05, 0.035));
       t += aM.y * uHr.xy + aM.z * (uWd.xy * (0.75 + 0.25 * sin(ph * 0.7 - uWd.w * 3.1)) + uWd.z * vec2(sin(ph - uWd.w * 8.3), 0.5 * sin(ph * 1.31 - uWd.w * 6.1)));
       d += t * vec2(smoothstep(0.0, uPin.x, aP.x) * smoothstep(0.0, uPin.x, ${FW}.0 - aP.x), smoothstep(0.0, uPin.y, ${FH}.0 - aP.y));
-      vec2 p = aP + d;
+      vec2 p = uZ.xy + (aP + d - uZ.xy) * uZ.z;
       gl_Position = vec4(p.x / ${FW / 2}.0 - 1.0, 1.0 - p.y / ${FH / 2}.0, 0.0, 1.0); vUV = aP / vec2(${FW}.0, ${FH}.0); }`));
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#ifdef GL_FRAGMENT_PRECISION_HIGH
     precision highp float;
     #else
     precision mediump float;
     #endif
-    uniform sampler2D uS; varying vec2 vUV; void main() { gl_FragColor = texture2D(uS, vUV); }`));
+    uniform sampler2D uS; uniform float uK; varying vec2 vUV;
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    // The picture is read between its pixels almost everywhere (the mesh moves it by fractions of a pixel), and reading
+    // it as a plain average of the four nearest pixels blurred it: half the fine detail of eyes and hair was lost here.
+    // This is the Catmull-Rom cubic over the sixteen nearest pixels, taken as nine averaged reads; it keeps edges.
+    void main() { vec2 R = vec2(${FW}.0, ${FH}.0), s = vUV * R, c = floor(s - 0.5) + 0.5, f = s - c;
+      vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f)), w1 = 1.0 + f * f * (-2.5 + 1.5 * f), w2 = f * (0.5 + f * (2.0 - 1.5 * f)), w3 = f * f * (-0.5 + 0.5 * f), w12 = w1 + w2;
+      vec2 a = (c - 1.0) / R, b = (c + w2 / w12) / R, e = (c + 2.0) / R;
+      vec4 v = (texture2D(uS, vec2(a.x, a.y)) * w0.x + texture2D(uS, vec2(b.x, a.y)) * w12.x + texture2D(uS, vec2(e.x, a.y)) * w3.x) * w0.y
+             + (texture2D(uS, vec2(a.x, b.y)) * w0.x + texture2D(uS, vec2(b.x, b.y)) * w12.x + texture2D(uS, vec2(e.x, b.y)) * w3.x) * w12.y
+             + (texture2D(uS, vec2(a.x, e.y)) * w0.x + texture2D(uS, vec2(b.x, e.y)) * w12.x + texture2D(uS, vec2(e.x, e.y)) * w3.x) * w3.y;
+      // Even so, a picture read between its pixels comes out softer than it went in (about a third of its finest detail
+      // at half a pixel off). Some of that is given back: the difference from the average of the four neighbours is added
+      // again, in part, and only inside the figure, so that its outline against the set gets no bright or dark rim.
+      vec2 px = 1.0 / R; vec4 n = 0.25 * (texture2D(uS, vUV + vec2(px.x, 0.0)) + texture2D(uS, vUV - vec2(px.x, 0.0)) + texture2D(uS, vUV + vec2(0.0, px.y)) + texture2D(uS, vUV - vec2(0.0, px.y)));
+      v.rgb += uK * step(0.999, min(v.a, n.a)) * (v.rgb - n.rgb);
+      v.a = clamp(v.a, 0.0, 1.0); gl_FragColor = vec4(clamp(v.rgb, 0.0, v.a), v.a); }
+    #else
+    void main() { gl_FragColor = texture2D(uS, vUV); }
+    #endif`));
   gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return null;
   gl.useProgram(pr); const loc = {}; for (const n of ['aP', 'aA', 'aB', 'aC', 'aK', 'aM']) { loc[n] = gl.getAttribLocation(pr, n); gl.enableVertexAttribArray(loc[n]); }
-  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin');
+  const U = n => gl.getUniformLocation(pr, n), uW = U('uW'), uV = U('uV'), uT = U('uT'), uBd = U('uBd'), uBc = U('uBc'), uBr = U('uBr'), uHr = U('uHr'), uWd = U('uWd'), uPin = U('uPin'), uZ = U('uZ'); gl.uniform1f(U('uK'), 0.2);
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture()); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.viewport(0, 0, FW, FH);
@@ -567,13 +647,13 @@ const warpGL = (() => {
     const ibo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, I, gl.STATIC_DRAW);
     return { vbo, ibo, n: I.length };
   }
-  w.draw = (a, q, bd, ts) => {
+  w.draw = (a, q, bd, ts, zf) => {
     const m = a.mesh || (a.mesh = mesh(a)), f = a.m.face, B = a.m.body;
     gl.bindBuffer(gl.ARRAY_BUFFER, m.vbo); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ibo);
     gl.vertexAttribPointer(loc.aP, 2, gl.FLOAT, false, 72, 0); gl.vertexAttribPointer(loc.aA, 4, gl.FLOAT, false, 72, 8); gl.vertexAttribPointer(loc.aB, 4, gl.FLOAT, false, 72, 24);
     gl.vertexAttribPointer(loc.aC, 4, gl.FLOAT, false, 72, 40); gl.vertexAttribPointer(loc.aK, 1, gl.FLOAT, false, 72, 56); gl.vertexAttribPointer(loc.aM, 3, gl.FLOAT, false, 72, 60);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, a.pf);
-    gl.uniform4f(uW, Math.max(0, q.yaw), Math.max(0, -q.yaw), Math.max(0, q.pit), Math.max(0, -q.pit)); gl.uniform4f(uV, q.bu, q.bd, q.roll, 0); gl.uniform4f(uT, 0, 0, f.cx, f.cy + 1.6 * f.iod); gl.uniform2f(uPin, 0.45 * f.iod, 0.5 * f.iod);
+    gl.uniform4f(uW, Math.max(0, q.yaw), Math.max(0, -q.yaw), Math.max(0, q.pit), Math.max(0, -q.pit)); gl.uniform4f(uV, q.bu, q.bd, q.roll, 0); gl.uniform4f(uT, 0, 0, f.cx, f.cy + 1.6 * f.iod); gl.uniform2f(uPin, 0.45 * f.iod, 0.5 * f.iod); gl.uniform3f(uZ, f.cx, f.cy, zf || 1);
     if (bd && B) {
       // The torso tilts about a point at the waist (below the frame) and leans about the face, so a lean makes the head a
       // touch larger where it is; both are folded into one shift-plus-turn about the face.
@@ -634,11 +714,12 @@ function bodyAt(id, q, ts) {
 function drawActor(id, ts, o) {
   const a = ACT[id], f = a.m.face, q = faceAt(id, o.b, o.bt, ts, o.still), bd = o.still || o.rigid ? null : bodyAt(id, q, ts), gl = warpGL && warpGL.ok;
   compose(a, q);
-  let pic; if (gl) { warpGL.draw(a, q, bd, ts); pic = warpGL.cv; } else pic = warpFlat(a, q.yaw * 0.11 * f.iod, q.pit * 0.08 * f.iod, q.roll);
+  let pic; if (gl) { warpGL.draw(a, q, bd, ts, o.zf); pic = warpGL.cv; }      // the mesh also does the presenter's zoom: one resampling of the picture, not two
+  else pic = warpFlat(a, q.yaw * 0.11 * f.iod, q.pit * 0.08 * f.iod, q.roll);
   if (!o.noBg) { c.save(); c.translate(f.cx, f.cy); c.scale(o.zb, o.zb); c.translate(-f.cx, -f.cy); c.drawImage(a.bg, 0, 0); c.restore(); }
   if (o.mid) o.mid();
   c.save();
-  c.translate(f.cx, f.cy); c.scale(o.zf, o.zf); c.translate(-f.cx, -f.cy);
+  if (!gl) { c.translate(f.cx, f.cy); c.scale(o.zf, o.zf); c.translate(-f.cx, -f.cy); }
   if (!gl && bd) {                 // without the mesh the whole figure leans from its bottom edge (which stays where it is) and rises a little with the breath
     c.transform(1, 0, -bd.sx / (FH - f.cy), 1, bd.sx * FH / (FH - f.cy), 0);
     c.translate(f.cx, FH); c.scale(1, 1 + bd.lean + 0.6 * bd.lift / (FH - f.cy)); c.translate(-f.cx, -FH);
@@ -898,6 +979,15 @@ function breathe() {
   live.until = clock() + 1200; idle(live.until); BREATH[WHO] = { T, Y, M: slopes(T, Y) };
 }
 function rest(ts) { live.idle = { who: WHO, start: ts, dur: 1e9, mo: { back: [] } }; live.beat = null; sync.on = false; }
+// The avatar is being spoken to, or has just been asked something: from the viewer's first sound until the answer
+// begins, or until a few seconds after they stop if nothing comes of it. The engine shows it on a face that asks it to
+// (HEARD in the engine: an animal shuts its mouth, lifts its ears and looks at whoever is speaking).
+function attend(on, linger) {
+  const e = attend.e || (attend.e = { span: null, timer: 0 }); clearTimeout(e.timer); e.timer = 0;
+  if (on) { if (!e.span) { const L = HEARD[WHO] = HEARD[WHO] || []; L.push(e.span = [clock(), 1e9]); if (L.length > 8) L.shift(); } }
+  else if (e.span && linger) e.timer = setTimeout(() => attend(false, live.state === 'thinking' || (io.dictation && io.dictation.speaking && io.dictation.speaking()) ? 1 : 0), linger * 1000);
+  else if (e.span) { e.span[1] = clock(); e.span = null; }
+}
 // The voice has reached line i of the reply being spoken (each line is begun once, whichever signal reports it first).
 function reach(i, ts) { const L = live.turn; if (!L || !L[i] || live.cur === i) return; live.cur = i; finish(); begin(L[i], ts == null ? clock() : ts); }
 // A line begins: its audio starts at ts. The engine builds jaw, lips, nods, brows and posture for it, from the sounds
@@ -1269,7 +1359,7 @@ $('files').onchange = e => { const list = [...e.target.files]; e.target.value = 
 // The avatar has finished (or been stopped). With hands-free on it is listening again; for a moment after, what is
 // heard is still checked against its last words, which may be arriving late through the microphone.
 function settled() { io.deafUntil = wall() + 1.2; if (io.forget) io.forget(); if (io.dictation && io.dictation.active()) setState('listening', 'Listening'); else setState('idle', 'Ready'); }
-function setState(s, label) { live.state = s; const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
+function setState(s, label) { live.state = s; if (s === 'idle') attend(false); const el = $('state'); el.dataset.s = s; el.textContent = label || s; $('stop').hidden = s !== 'speaking'; }
 function say(who, text) { const li = document.createElement('li'), tag = document.createElement('span'); tag.textContent = who; li.append(tag, text); $('log').append(li); $('log').scrollTop = 1e9; return t => { li.lastChild.nodeValue = t; $('log').scrollTop = 1e9; }; }
 // Asks Claude. `part` is called with the whole reply so far, a few times a second, while it is being written.
 const ASKED = 'claude-haiku-5-5';
@@ -1337,10 +1427,10 @@ async function turn(text) {
   hush(); const my = live.seq; if (live.beat) { finish(); rest(clock()); }                                    // a new question cuts the answer off
   say('You', text); live.history.push({ role: 'user', content: text });
   if (live.idle) live.idle.mo.back.push([clock() - live.idle.start + 0.25, 0.6]);                              // a small nod: heard you
-  setState('thinking', 'Thinking'); $('cap').textContent = '';
+  setState('thinking', 'Thinking'); attend(true); $('cap').textContent = '';
   // just before the first sound: the smile lets go and a breath goes in, as they would
   const span = [1e9, 1e9]; let begun = false;
-  const prep = () => { if (begun || my !== live.seq) return; begun = true; const ts = clock(); span[0] = ts + 0.45; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe(); setState('speaking', 'Speaking'); };
+  const prep = () => { if (begun || my !== live.seq) return; begun = true; attend(false); const ts = clock(); span[0] = ts + 0.45; (SPOKE[WHO] = SPOKE[WHO] || []).push(span); live.breath.push([ts, -1], [ts + 0.4, 1]); breathe(); setState('speaking', 'Speaking'); };
   // With its own voice the avatar starts on the first sentence while Claude is still writing the rest: each finished
   // sentence goes to the voice as it appears. A borrowed voice needs the whole reply first.
   const lines = [], own = mode() === 'own', tidy = s => s.replace(/[*_#`]/g, '').slice(0, 600); let used = 0, talker = null, shown = null, opened = !own;
@@ -1382,7 +1472,7 @@ function frame() {
     for (let k = live.cur + 1; k < L.length; k++) { const l = L[k]; if (l.skip) continue; if (l.when != null && heard >= l.when - PRE - 0.03) reach(k, ts + l.when - heard); break; }
   }
   const b = live.beat || live.idle, bt = live.beat ? PRE + planned() : ts - live.idle.start, f = a.m.face;
-  c.setTransform(1, 0, 0, 1, -clamp(f.cx - 384, 0, FW - 768), 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  c.setTransform(1, 0, 0, 1, -Math.round(clamp(f.cx - 384, 0, FW - 768)), 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
   drawActor(WHO, ts, { b, bt, zb: 1, zf: 1.02 });
   if (live.beat) {                                                // the caption: the line, with the words said so far in full ink
     let n = 0; while (n < b.wt.length && b.wt[n] <= bt) n++;
@@ -1451,7 +1541,7 @@ function browserDictation() {
     io.forget = () => { clearTimeout(timer); timer = 0; heard = ''; $('say').value = ''; };                       // called when the avatar stops speaking
     // true if this piece is to be used; stops the avatar first if it was the viewer speaking over it
     const mine = text => { if (!busy()) return true; if (!viewer(join(heard, text))) return false; interrupt(); return true; };
-    d.onPartial(({ text }) => { if (!mine(text)) return; $('say').value = join(heard, text); if (text) clearTimeout(timer); else if (heard) soon(); });      // still talking: wait
+    d.onPartial(({ text }) => { if (!mine(text)) return; $('say').value = join(heard, text); if (text) { clearTimeout(timer); attend(true); attend(false, 3); } else if (heard) soon(); });      // still talking: wait
     d.onFinal(({ text }) => { if (!mine(text)) return; heard = join(heard, text); $('say').value = heard; soon(); });
     d.onState(({ state }) => { const on = state === 'listening'; mic.setAttribute('aria-pressed', on); mic.textContent = on ? 'Listening · stop' : 'Speak';
       if (on) { if (live.state === 'idle') setState('listening', 'Listening'); } else if (state === 'idle') { if (heard) send(); if (live.state === 'listening') setState('idle', 'Ready'); } });

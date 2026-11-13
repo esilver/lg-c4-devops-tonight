@@ -108,7 +108,7 @@ function pitchTrack(str) {
 }
 const pitchAt = (b, bt) => { const x = (bt - b.lead) * 25, i = Math.floor(x); return x < 0 || i >= b.pc.length - 1 ? 0 : b.pc[i] + (b.pc[i + 1] - b.pc[i]) * (x - i); };
 // Per presenter, on the show's clock: where head and body rest, phrase by phrase; the breath; and when they speak.
-const POSE = {}, BREATH = {}, SPOKE = {}, BLINK = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
+const POSE = {}, BREATH = {}, SPOKE = {}, BLINK = {}, HEARD = {}, POSE0 = [{ t: -9, y: 0, p: 0, r: 0, x: 0, w: 0, l: 0 }];
 function buildSpeech(b) {
   const sp = b.sp, L = b.lead, segs = [], pauses = [], acc = [], who = b.who, sty = STYLE[who] || 1;
   b.words = sp.words.map(w => w[0]); b.wt = sp.words.map(w => w[1] + L); b.text = b.words.join(' '); b.pc = pitchTrack(sp.f0 || '');
@@ -250,7 +250,7 @@ function buildSpeech(b) {
 // Lays the bulletin out on its clock from a set of recordings. Called once here; the demo page calls it again to switch voices.
 const BEATS = []; let SHOW_LEN = 0;
 function buildShow(speech) {
-  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE, BLINK]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
+  BEATS.length = 0; SHOW_LEN = 0; for (const o of [POSE, BREATH, SPOKE, BLINK, HEARD]) for (const k in o) delete o[k]; const seen = {}; let phi = 0;
   SHOW.forEach(L => {
     const b = Object.assign({ start: SHOW_LEN }, L);
     if (L.text && !L.split) { b.strap = !seen[L.who]; seen[L.who] = true; }      // name strap the first time someone is on camera
@@ -347,6 +347,9 @@ function bodyPostureAt(P, ts) {              // the body takes about a second ov
 const breathAt = (id, ts) => { const B = BREATH[id]; return B && B.T ? curve(B.T, B.Y, B.M, ts) : 0.45; };      // how full the lungs are, 0..1
 // A presenter who is not speaking wears the photograph's own slight smile; it lets go just before they speak and comes back after.
 function restAt(id, ts) { let w = 1; for (const [t0, t1] of SPOKE[id] || []) w = Math.min(w, 1 - rise(ts, t0 - 0.45, t0 - 0.15) * (1 - rise(ts, t1 + 0.35, t1 + 1.1))); return w; }
+// Being spoken to: HEARD[id] lists [from, to] on the show's clock. A page that hears its viewer fills it in (from the
+// viewer's first sound until the answer begins); the bulletin has nobody to hear. Only a face that asks shows it (below).
+function heardAt(id, ts) { let w = 0; const L = HEARD[id] || []; for (let i = Math.max(0, L.length - 4); i < L.length; i++) w = Math.max(w, rise(ts, L[i][0], L[i][0] + 0.3) * (1 - rise(ts, L[i][1], L[i][1] + 0.7))); return w; }
 const nodShape = x => gauss(x - 0.03, x < 0.03 ? 0.085 : 0.16) - 0.3 * gauss(x + 0.17, 0.07);      // a small lift, the drop on the syllable, and a return that takes twice as long as the drop (as quick as the drop, it was a twitch)
 const holdShape = (x, hold) => rise(x, -0.18, -0.02) * (1 - rise(x, hold, hold + 0.32));
 /* Everything about one face at one moment. b / bt: the line on air and how far into it; ts: the show's clock.
@@ -388,6 +391,26 @@ function faceAt(id, b, bt, ts, still) {
     const k = Math.floor(ts / 6.1), t0 = k * 6.1 + 4 * hash(k + 0.2, sd + 41), t1 = t0 + 0.35 + 0.5 * hash(k + 0.5, sd + 41);
     if (hash(k, sd + 43) < 0.55) { const lx = (hash(k + 0.7, sd + 41) < 0.5 ? -1 : 1) * (0.65 + 0.25 * hash(k + 0.9, sd + 41)), e = rise(ts, t0, t0 + 0.06) * (1 - rise(ts, t1, t1 + 0.07)); gx += (lx - gx) * e; gy *= 1 - e; yaw += 0.07 * lx * rise(ts, t0 + 0.03, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.4)); }
   }
+  // A dog tilts its head. BODY[id].tilt (radians) asks for that: now and then, while its owner is not speaking, the
+  // head goes over to one side for a second or two, the ears coming up with it, and comes back (restAt lets it go
+  // before the next word and keeps it away until a moment after the last one).
+  // An animal shows what it is about with its mouth and its ears, and the page may know that it is being spoken to
+  // (HEARD). Three more things a face may ask for, all of them only while its owner is not speaking:
+  //   pant: left alone and at ease the mouth hangs open, the corners drawn back, and rocks a little with each quick
+  //         breath, in bouts of a few seconds; the ears let go a little meanwhile. The number is how far open, on the
+  //         scale of speech.
+  //   perk: spoken to, it shuts its mouth, lifts its ears (the number, on the scale of the brows) and keeps its eyes on
+  //         whoever is speaking, until it answers.
+  //   tilt: spoken to, the head more often than not goes over to one side a moment after the first word.
+  { const K = BODY[id] || {}, tl = K.tilt, on = tl || K.pant || K.perk ? restAt(id, ts) : 0, hear = on ? heardAt(id, ts) * on : 0; let pe = 0;
+    if (K.pant && on) { const k = Math.floor(ts / 10.4), t0 = k * 10.4 + 0.6 + 2.2 * hash(k + 0.3, sd + 65), t1 = t0 + 3.5 + 3.3 * hash(k + 0.6, sd + 65);
+      if (hash(k, sd + 67) < 0.72) pe = rise(ts, t0, t0 + 0.8) * (1 - rise(ts, t1, t1 + 0.6)) * on * (1 - heardAt(id, ts)); }
+    if (tl) { const k = Math.floor(ts / 6.3), t0 = k * 6.3 + 0.8 + 2.6 * hash(k + 0.3, sd + 51), t1 = t0 + 1.3 + 1.7 * hash(k + 0.6, sd + 51);      // (not while it pants: a tilt is attention)
+      if (hash(k, sd + 53) < 0.6) { const e = rise(ts, t0, t0 + 0.4) * (1 - rise(ts, t1, t1 + 0.55)) * on * (1 - hear) * (1 - pe); roll += (hash(k + 0.8, sd + 51) < 0.5 ? -1 : 1) * tl * e; bu += 0.45 * e; }
+      const L = HEARD[id], h0 = L && L.length ? L[L.length - 1][0] : null;
+      if (hear && hash(h0, sd + 71) < 0.65) { const a0 = h0 + 0.4 + 0.5 * hash(h0 + 0.2, sd + 71), a1 = a0 + 1.3 + 1.5 * hash(h0 + 0.4, sd + 71); roll += (hash(h0 + 0.6, sd + 71) < 0.5 ? -1 : 1) * tl * rise(ts, a0, a0 + 0.4) * (1 - rise(ts, a1, a1 + 0.55)) * hear; } }
+    if (K.perk && hear) { bu += K.perk * hear; gx *= 1 - hear; gy *= 1 - hear; }
+    if (pe > 0) { q.o = Math.max(q.o, pe * (K.pant * (1 + 0.12 * wob(ts * 0.33, sd + 65)) + 0.022 * Math.sin(2 * Math.PI * (2.7 * ts + 0.35 * wob(ts * 0.21, sd + 67))))); q.g = Math.max(q.g, pe); bd += 0.6 * pe; } }
   // other blinks fall irregularly, but not right next to one that belongs to the speech: one in every stretch of about
   // three seconds, anywhere in it, so they come one to five seconds apart (they used to be drawn with a small chance
   // every second or so, which now and then left the eyes open for a quarter of a minute)
@@ -430,7 +453,7 @@ function mouthLayers(a, o, s, g) {
   const as = Math.min(1, Math.abs(s)) * 2, wn = Math.max(0, 1 - as), w1 = as <= 1 ? as : 2 - as, w2 = Math.max(0, as - 1), press = o < 0 ? Math.min(1, -o / 0.12) : 0;
   if (press > 0) out.push([a.mP, press * wn * rest]);
   row(a.mN, M.jn, wn * rest, true); row(s >= 0 ? a.rows.e1 : a.rows.w1, M.js, w1 * rest); row(s >= 0 ? a.rows.e2 : a.rows.w2, M.js, w2 * rest);
-  row(a.rows.sg, M.js, gs); if (gh > 0.004) out.push([a.mH, gh]);
+  row(a.rows.sg, M.jg || M.js, gs); if (gh > 0.004) out.push([a.mH, gh]);      // (a face may give the smile's row its own, finer steps: jg)
   return out;
 }
 function eyeLayers(a, q) {
